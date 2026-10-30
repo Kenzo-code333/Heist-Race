@@ -53,6 +53,9 @@ const screens = new Screens({
   onResume() {
     input.requestLock();
   },
+  onBackToLobby() {
+    network.backToLobby();
+  },
 });
 
 function handleJoinResult(result) {
@@ -74,8 +77,21 @@ network.on('disconnect', () => {
 
 network.on('room:state', (state) => {
   roomState = state;
-  if (!session) screens.updateLobby(state, network.id);
+  screens.updateLobby(state, network.id);
+  screens.setScoreboardHost(state.hostId === network.id);
+  // The host sent everyone back from the scoreboard to the lobby.
+  if (state.phase === 'lobby' && screens.current === 'scoreboard') screens.show('lobby');
 });
+
+network.on('match:end', ({ results }) => {
+  endSession();
+  screens.showScoreboard(results, roomState?.hostId === network.id);
+});
+
+// E pressed / released → tell the server (it decides what happens).
+input.onInteract = (down) => {
+  if (session) network.sendInteract(down);
+};
 
 network.on('match:start', ({ roster }) => {
   endSession();

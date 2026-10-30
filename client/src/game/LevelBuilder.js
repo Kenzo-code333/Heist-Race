@@ -9,7 +9,7 @@
 // ============================================================================
 
 import * as THREE from 'three';
-import { ROOMS, WALLS, DOORWAYS, OBSTACLES, DECOR, roomAt } from '../../../shared/map.js';
+import { ROOMS, WALLS, DOORWAYS, OBSTACLES, DECOR, EXITS, roomAt } from '../../../shared/map.js';
 import { WALL_HEIGHT, WALL_THICKNESS, DOOR_HEIGHT } from '../../../shared/constants.js';
 import { boxGeo, boxMesh, mesh, floorPlane } from './geometry.js';
 import { getMaterial } from './materials.js';
@@ -35,6 +35,7 @@ export function buildLevel(scene) {
   buildLights(level);
   buildObstacles(level, cameraBlockers);
   buildDecor(level);
+  buildExits(level);
 
   scene.add(level);
   return { cameraBlockers };
@@ -219,6 +220,34 @@ function buildObstacles(level, cameraBlockers) {
       new THREE.Vector3(o.x + o.w / 2, o.h, o.z + o.d / 2),
     ));
   });
+}
+
+// A glowing green marking on the floor at each exit.
+function buildExits(level) {
+  for (const exit of EXITS) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512; canvas.height = 256;
+    const ctx = canvas.getContext('2d');
+    ctx.strokeStyle = '#3dff8a';
+    ctx.lineWidth = 14;
+    ctx.setLineDash([36, 22]);
+    ctx.strokeRect(14, 14, 484, 228);
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#3dff8a';
+    ctx.font = 'bold 92px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('EXIT', 256, 134);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const decal = new THREE.Mesh(
+      new THREE.PlaneGeometry(2.6, 1.3),
+      new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0.55, depthWrite: false, toneMapped: false }),
+    );
+    decal.rotation.x = -Math.PI / 2;
+    decal.position.set(exit.x, 0.012, exit.z - 0.2);
+    level.add(decal);
+  }
 }
 
 function buildDecor(level) {

@@ -25,6 +25,12 @@ export class Hud {
     this.centerEl = document.getElementById('hud-center');
     this.toastEl = document.getElementById('hud-toast');
     this.toastTimer = null;
+    this.timerEl = document.getElementById('hud-timer');
+    this.carriedEl = document.getElementById('hud-carried');
+    this.bankedEl = document.getElementById('hud-banked');
+    this.promptEl = document.getElementById('hud-prompt');
+    this.promptLabel = document.getElementById('hud-prompt-label');
+    this.progressFill = document.getElementById('hud-progress-fill');
     this.last = {}; // only touch the page when something changed (cheaper)
   }
 
@@ -68,6 +74,37 @@ export class Hud {
     this.toastEl.classList.add('show');
     clearTimeout(this.toastTimer);
     this.toastTimer = setTimeout(() => this.toastEl.classList.remove('show'), seconds * 1000);
+  }
+
+  /** Match clock, as m:ss. */
+  setTimer(secondsLeft) {
+    const text = `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`;
+    if (this.last.timer === text) return;
+    this.last.timer = text;
+    this.timerEl.textContent = text;
+    this.timerEl.classList.toggle('urgent', secondsLeft <= 60);
+  }
+
+  setLoot(carried, banked) {
+    const key = `${carried}|${banked}`;
+    if (this.last.loot === key) return;
+    this.last.loot = key;
+    this.carriedEl.textContent = `$${carried.toLocaleString('en-US')}`;
+    this.bankedEl.textContent = banked > 0 ? `BANKED $${banked.toLocaleString('en-US')}` : '';
+  }
+
+  /**
+   * Show the "E" prompt. `progress` is 0..1 while holding, or null.
+   * Pass label = null to hide it.
+   */
+  setPrompt(label, progress = null) {
+    this.promptEl.classList.toggle('hidden', !label);
+    if (!label) return;
+    if (this.last.prompt !== label) {
+      this.last.prompt = label;
+      this.promptLabel.textContent = progress === null ? `Hold — ${label}` : label;
+    }
+    this.progressFill.style.width = `${Math.round((progress ?? 0) * 100)}%`;
   }
 
   /** Red pulsing screen edges while a guard is chasing you. */

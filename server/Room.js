@@ -5,6 +5,7 @@
 //
 //   'lobby'   → players gather, the host presses Start
 //   'playing' → a Match (the actual heist simulation) is running
+//   'ended'   → everyone sees the scoreboard; the host can go back to the lobby
 //
 // The room relays messages between the sockets and its Match, and sends each
 // player a personal state "snapshot" every tick.
@@ -26,7 +27,7 @@ export class Room {
 
   /** Try to add a player. Returns { ok, error? } for the client. */
   addPlayer(socket, rawName) {
-    if (this.phase !== 'lobby') return { ok: false, error: 'This heist has already started.' };
+    if (this.phase !== 'lobby') return { ok: false, error: 'This heist has already started — try again in a minute.' };
     if (this.players.size >= MAX_PLAYERS) return { ok: false, error: 'This room is full (6 players).' };
 
     // Give the player the first colour nobody else is using.
@@ -61,13 +62,34 @@ export class Room {
   start(byId) {
     if (byId !== this.hostId || this.phase !== 'lobby') return;
     this.phase = 'playing';
-    this.match = new Match([...this.players.values()]);
+    this.match = new Match([...this.players.values()], (results) => this.endMatch(results));
     this.io.to(this.code).emit('match:start', { roster: this.roster() });
     this.broadcastRoomState();
   }
 
   handleInput(id, input) {
     if (this.phase === 'playing') this.match.handleInput(id, input);
+  }
+
+  handleInteract(id, down) {
+    if (this.phase === 'playing') this.match.handleInteract(id, down);
+  }
+
+  /** Called by the Match when it's over. */
+  endMatch(results) {
+    this.phase = 'ended';
+    // Send one last snapshot so everyone sees the final state, then the results.
+    for (const player of this.players.values()) player.socket.emit('snap', this.match.snapshotFor(player.id));
+    this.io.to(this.code).emit('match:end', { results });
+    this.match = null;
+    this.broadcastRoomState();
+  }
+
+  /** Host pressed "Back to lobby" on the scoreboard. */
+  backToLobby(byId) {
+    if (byId !== this.hostId || this.phase !== 'ended') return;
+    this.phase = 'lobby';
+    this.broadcastRoomState();
   }
 
   /** Public info about everyone (no sockets!) */
@@ -88,6 +110,7 @@ export class Room {
   tick(dt) {
     if (this.phase !== 'playing') return;
     this.match.tick(dt);
+    if (this.phase !== 'playing') return; // the match just ended during this tick
     // Each player gets their OWN snapshot (later: filtered by what they can see).
     for (const player of this.players.values()) {
       player.socket.emit('snap', this.match.snapshotFor(player.id));

@@ -52,3 +52,9 @@ export const GUARD = {
 export const KNOCKOUT_TIME = 5;     // seconds a caught thief stays down
 export const KNOCKOUT_IMMUNITY = 4; // extra seconds after waking up when guards ignore you
 export const EYE_HEIGHT = { standing: 1.5, crouching: 0.9 };
+
+// --- Loot, interactions and the match ----------------------------------------
+export const REACH = 1.5;            // how close you must be to interact (m)
+export const MATCH_DURATION = 8 * 60; // seconds; thieves still inside at the end lose their loot
+export const KNOCKOUT_DROP_SHARE = 0.5; // share of carried cash dropped when knocked out
+export const ACTION_TIME = { grabCash: 1.0, escape: 1.5 }; // seconds of holding E

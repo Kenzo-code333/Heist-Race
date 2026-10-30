@@ -4,8 +4,8 @@
 // Everything that talks to the server goes through this class.
 //
 // Socket.io sends named messages ("events") both ways:
-//   client → server : room:create, room:join, room:leave, room:start, inputs
-//   server → client : room:state, match:start, snap (20x per second)
+//   client → server : room:create, room:join, room:leave, room:start, room:lobby, inputs, interact
+//   server → client : room:state, match:start, snap (20x per second), match:end
 //
 // Some requests expect an answer ("acknowledgement"); we wrap those in
 // Promises so the caller can write: const result = await network.createRoom(name)
@@ -47,6 +47,8 @@ export class Network {
   joinRoom(code, name) { return this.request('room:join', { code, name }); }
   leaveRoom() { this.socket.emit('room:leave'); }
   startMatch() { this.socket.emit('room:start'); }
+  backToLobby() { this.socket.emit('room:lobby'); }
+  sendInteract(down) { this.socket.emit('interact', { down }); }
 
   /**
    * Send this frame's inputs (usually 1, sometimes 2-3) in one message.

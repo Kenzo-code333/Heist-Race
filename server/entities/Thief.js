@@ -27,6 +27,26 @@ export class Thief {
     this.knockedOutUntil = 0; // match time when the thief wakes up
     this.immuneUntil = 0;     // guards ignore the thief until this time
     this.events = [];         // one-off messages for this player (sent with the next snapshot)
+
+    // Loot
+    this.cash = 0;            // dollars carried (lost if caught inside at the end)
+    this.items = [];          // bulky loot carried: [{ type, value, heavy }] (Milestone 6)
+    this.banked = 0;          // dollars safely carried out through an exit
+    this.escaped = false;
+
+    // Hold-E actions
+    this.interactHeld = false; // is the player holding E right now?
+    this.action = null;        // { kind, targetId, duration, label, progress, startX, startZ }
+  }
+
+  /** Total value of everything carried. */
+  carriedValue() {
+    return this.cash + this.items.reduce((sum, item) => sum + item.value, 0);
+  }
+
+  /** Still in the building and playing? */
+  isActive() {
+    return !this.escaped;
   }
 
   isKnockedOut(time) {
@@ -35,7 +55,7 @@ export class Thief {
 
   /** Can guards (and later cameras) notice this thief? */
   isTargetable(time) {
-    return time >= this.immuneUntil;
+    return !this.escaped && time >= this.immuneUntil;
   }
 
   knockOut(time) {
@@ -113,6 +133,11 @@ export class Thief {
       seq: this.lastSeq,
       koLeft: Math.max(0, Math.round((this.knockedOutUntil - time) * 10) / 10),
       immune: time < this.immuneUntil,
+      cash: this.cash,
+      items: this.items,
+      banked: this.banked,
+      escaped: this.escaped,
+      act: this.action && { kind: this.action.kind, label: this.action.label, p: Math.round((this.action.progress / this.action.duration) * 100) / 100 },
     };
   }
 }

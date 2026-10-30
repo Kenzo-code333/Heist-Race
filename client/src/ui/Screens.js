@@ -18,6 +18,7 @@ export class Screens {
       menu: $('screen-menu'),
       lobby: $('screen-lobby'),
       pause: $('screen-pause'),
+      scoreboard: $('screen-scoreboard'),
     };
 
     // Remember the name between visits (browser storage; may be unavailable).
@@ -35,6 +36,7 @@ export class Screens {
     $('lobby-leave').addEventListener('click', () => handlers.onLeave());
     $('lobby-copy').addEventListener('click', () => this.copyLink());
     $('pause-resume').addEventListener('click', () => handlers.onResume());
+    $('score-lobby').addEventListener('click', () => handlers.onBackToLobby());
 
     // Opened from a shared link (?room=ABCD): pre-fill the code.
     const code = new URLSearchParams(window.location.search).get('room');
@@ -47,6 +49,7 @@ export class Screens {
 
   /** Show one screen (or none, with null). */
   show(name) {
+    this.current = name;
     for (const [key, el] of Object.entries(this.screens)) el.classList.toggle('hidden', key !== name);
     this.overlay.classList.toggle('hidden', name === null);
   }
@@ -87,6 +90,39 @@ export class Screens {
     const isHost = state.hostId === yourId;
     $('lobby-start').classList.toggle('hidden', !isHost);
     $('lobby-wait').classList.toggle('hidden', isHost);
+  }
+
+  /** Fill and show the end-of-match scoreboard. */
+  showScoreboard(results, isHost) {
+    const money = (v) => `$${v.toLocaleString('en-US')}`;
+    const winner = results.find((r) => r.escaped && r.score > 0);
+    $('score-winner').textContent = winner
+      ? `${winner.name} wins with ${money(winner.score)}!`
+      : 'Nobody made it out with any loot.';
+
+    const table = $('score-table');
+    table.innerHTML = '';
+    results.forEach((r, i) => {
+      const row = table.insertRow();
+      if (r === winner) row.className = 'winner';
+      row.insertCell().textContent = `${i + 1}.`;
+      const nameCell = row.insertCell();
+      const swatch = document.createElement('span');
+      swatch.className = 'swatch';
+      swatch.style.background = `#${r.color.toString(16).padStart(6, '0')}`;
+      nameCell.append(swatch, document.createTextNode(r.name));
+      row.insertCell().textContent = r.escaped ? 'Escaped' : `Caught inside (lost ${money(r.lost)})`;
+      const scoreCell = row.insertCell();
+      scoreCell.className = 'money';
+      scoreCell.textContent = money(r.score);
+    });
+    this.setScoreboardHost(isHost);
+    this.show('scoreboard');
+  }
+
+  setScoreboardHost(isHost) {
+    $('score-lobby').classList.toggle('hidden', !isHost);
+    $('score-wait').classList.toggle('hidden', isHost);
   }
 
   copyLink() {

@@ -20,7 +20,9 @@
 
 import * as THREE from 'three';
 import { stepMovement, facingFromDirection } from '../../../shared/movement.js';
-import { COLLIDERS, roomAt } from '../../../shared/map.js';
+import { COLLIDERS, EXITS, roomAt } from '../../../shared/map.js';
+import { findInteraction } from '../../../shared/interactions.js';
+import { LootLayer } from './LootLayer.js';
 import { INPUT_DT, INTERPOLATION_DELAY } from '../../../shared/constants.js';
 import { CharacterModel } from './CharacterModel.js';
 import { GuardView } from './GuardView.js';
@@ -58,7 +60,10 @@ export class GameSession {
     this.accumulator = 0;
 
     // Latest official facts about ourselves from the server
-    this.myState = { koLeft: 0, immune: false };
+    this.myState = { koLeft: 0, immune: false, cash: 0, items: [], banked: 0, escaped: false };
+    this.timeLeft = 0;
+    this.loot = new LootLayer(renderer.scene);
+    this.lootList = [];
 
     // --- Everyone else (interpolated) ---
     this.others = new Map(); // id -> { model, tag, facing, lastX, lastZ, speed }
@@ -78,6 +83,7 @@ export class GameSession {
     this.others.clear();
     for (const guard of this.guards.values()) guard.dispose();
     this.guards.clear();
+    this.loot.dispose();
   }
 
   // ------------------------------------------------------------------ network
@@ -86,6 +92,8 @@ export class GameSession {
     const you = snap.you;
     if (!you) return;
     this.myState = you;
+    this.timeLeft = snap.timeLeft;
+    this.lootList = snap.loot ?? [];
     for (const event of snap.events ?? []) this.handleEvent(event);
 
     if (!this.hasSpawned) {
@@ -108,7 +116,11 @@ export class GameSession {
   /** One-off messages from the server. */
   handleEvent(event) {
     if (event.type === 'spotted') this.hud.toast('A guard spotted you — RUN!');
-    if (event.type === 'knockedOut') this.hud.toast('A guard knocked you out!', 4);
+    if (event.type === 'knockedOut') {
+      this.hud.toast(event.dropped > 0 ? `Knocked out! You dropped $${event.dropped}.` : 'A guard knocked you out!', 4);
+    }
+    if (event.type === 'grabbed') this.hud.toast(`+$${event.value}`, 1.5);
+    if (event.type === 'escaped') this.hud.toast(`You escaped with $${event.banked}!`, 5);
   }
 
   /** Apply the same restrictions the server applies (see Thief.modifyInput). */
@@ -127,6 +139,10 @@ export class GameSession {
   // ------------------------------------------------------------------ frame
   update(dt) {
     if (!this.hasSpawned) return;
+    if (this.myState.escaped) {
+      this.updateSpectator(dt);
+      return;
+    }
 
     // 1) Mouse → camera angles
     const { dx, dy } = this.input.consumeMouse();
@@ -172,12 +188,50 @@ export class GameSession {
       this.updateGuards(dt, sample);
     }
 
-    // 4) HUD
+    // 4) Loot and the "E" prompt
+    const option = knockedOut ? null : findInteraction({ x: drawX, z: drawZ }, { loot: this.lootList, exits: EXITS });
+    const act = this.myState.act;
+    if (act) this.hud.setPrompt(act.label, act.p);
+    else this.hud.setPrompt(option?.label ?? null);
+    this.loot.sync(this.lootList, option?.kind === 'grab' ? option.targetId : null);
+
+    // 5) HUD
+    this.hud.setTimer(this.timeLeft);
+    this.hud.setLoot(this.carriedValue(), this.myState.banked);
     this.hud.setRoom(roomAt(drawX, drawZ)?.name ?? '—');
     this.hud.setStance(this.me.moveMode, this.me.crouching);
     this.hud.setCenter(knockedOut ? `KNOCKED OUT\n${Math.ceil(this.myState.koLeft)}` : '');
     const chased = sample?.newer.guards?.some((g) => g.me && g.s === 'chase');
     this.hud.setDanger(!!chased);
+  }
+
+  carriedValue() {
+    return this.myState.cash + (this.myState.items ?? []).reduce((sum, item) => sum + item.value, 0);
+  }
+
+  /**
+   * After escaping: watch the rest of the heist from above. The camera sits
+   * above the building; ceilings are only visible from below, so we look
+   * straight into every room like a doll's house.
+   */
+  updateSpectator(dt) {
+    this.myModel.root.visible = false;
+    const cam = this.renderer.camera;
+    const t = performance.now() / 1000;
+    cam.position.set(15 + Math.sin(t * 0.05) * 3, 24, 25);
+    cam.lookAt(15, 0, 10);
+    const sample = this.buffer.sample();
+    if (sample) {
+      this.updateOthers(dt, sample);
+      this.updateGuards(dt, sample);
+    }
+    this.loot.sync(this.lootList, null);
+    this.hud.setPrompt(null);
+    this.hud.setDanger(false);
+    this.hud.setTimer(this.timeLeft);
+    this.hud.setLoot(0, this.myState.banked);
+    this.hud.setRoom('Escaped');
+    this.hud.setCenter(`ESCAPED\nwaiting for the others…`);
   }
 
   updateGuards(dt, { older, newer, alpha }) {

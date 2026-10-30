@@ -39,6 +39,22 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #050506; col
 #hud-toast.show { opacity: 1; }
 body.danger #hud::after { content: ""; position: absolute; inset: 0; box-shadow: inset 0 0 120px rgba(224, 83, 61, 0.45); animation: pulse 0.8s infinite alternate; }
 @keyframes pulse { from { opacity: 0.5; } to { opacity: 1; } }
+#hud-top-center { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); text-align: center; }
+#hud-timer { font-family: var(--mono); font-size: 22px; letter-spacing: 0.1em; padding: 4px 14px; background: var(--panel); }
+#hud-timer.urgent { color: var(--danger); }
+#hud-bottom-right { position: absolute; right: 22px; bottom: 22px; background: var(--panel); padding: 12px 16px; border-right: 3px solid var(--accent); text-align: right; min-width: 150px; }
+.hud-small { font-family: var(--mono); font-size: 11px; letter-spacing: 0.2em; color: var(--muted); }
+#hud-carried { font-size: 26px; font-weight: 600; color: var(--accent); }
+#hud-prompt { position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%); background: var(--panel); padding: 10px 16px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; min-width: 260px; }
+#hud-prompt .key { font-family: var(--mono); font-weight: 700; border: 1px solid var(--ink); padding: 1px 8px; border-radius: 3px; }
+#hud-progress { width: 100%; height: 5px; background: rgba(255,255,255,0.12); }
+#hud-progress-fill { height: 100%; width: 0; background: var(--accent); }
+#score-table { width: 100%; border-collapse: collapse; margin: 16px 0 22px; text-align: left; font-size: 14px; }
+#score-table td { padding: 8px 6px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+#score-table td.money { text-align: right; font-family: var(--mono); }
+#score-table tr.winner td { color: var(--accent); font-weight: 600; }
+#score-table .swatch { display: inline-block; width: 10px; height: 10px; margin-right: 8px; border-radius: 2px; }
+.overlay-card { max-height: calc(100vh - 32px); overflow-y: auto; }
 #hud-crosshair { position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 50%; background: rgba(255,255,255,0.55); }
 
 /* ---------- Start overlay ---------- */

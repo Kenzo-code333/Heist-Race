@@ -22,10 +22,15 @@ export class Input {
     this.mouseDY = 0;
     this.locked = false;
     this.onLockChange = () => {}; // callback set by main.js
+    this.onInteract = () => {};   // called with true (E pressed) / false (E released)
+    this.interactDown = false;
 
     window.addEventListener('keydown', (e) => this.onKeyDown(e));
-    window.addEventListener('keyup', (e) => this.keys.delete(e.code));
-    window.addEventListener('blur', () => this.keys.clear()); // tab switched: release everything
+    window.addEventListener('keyup', (e) => {
+      this.keys.delete(e.code);
+      if (e.code === 'KeyE') this.setInteract(false);
+    });
+    window.addEventListener('blur', () => { this.keys.clear(); this.setInteract(false); }); // tab switched: release everything
     document.addEventListener('mousemove', (e) => {
       if (!this.locked) return;
       this.mouseDX += e.movementX;
@@ -33,7 +38,7 @@ export class Input {
     });
     document.addEventListener('pointerlockchange', () => {
       this.locked = document.pointerLockElement === this.lockElement;
-      if (!this.locked) this.keys.clear();
+      if (!this.locked) { this.keys.clear(); this.setInteract(false); }
       this.onLockChange(this.locked);
     });
   }
@@ -49,7 +54,15 @@ export class Input {
     if (e.code === 'Tab') e.preventDefault();
     if (!this.locked) return;
     if (e.code === 'KeyC' && !e.repeat) this.crouchToggled = !this.crouchToggled;
+    if (e.code === 'KeyE' && !e.repeat) this.setInteract(true);
     this.keys.add(e.code);
+  }
+
+  /** Report E presses/releases once (key repeat is ignored). */
+  setInteract(down) {
+    if (this.interactDown === down) return;
+    this.interactDown = down;
+    this.onInteract(down);
   }
 
   /** Current movement intent as plain true/false flags. */

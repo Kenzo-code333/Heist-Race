@@ -58,6 +58,8 @@ io.on('connection', (socket) => {
 
   socket.on('room:leave', leaveCurrent);
   socket.on('room:start', () => room?.start(socket.id));
+  socket.on('room:lobby', () => room?.backToLobby(socket.id));
+  socket.on('interact', (msg) => room?.handleInteract(socket.id, msg?.down));
   socket.on('inputs', (list) => {
     if (!Array.isArray(list)) return;
     for (const input of list.slice(0, 10)) room?.handleInput(socket.id, input);

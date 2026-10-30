@@ -10,18 +10,19 @@ ambiguous pick the simplest option and say so.
 
 ## Current milestone
 
-**Milestone 3 — DONE:** one guard (data-driven `GUARD_ROUTES`) patrolling with A*
-pathfinding, flashlight spotlight + floor vision cone clipped by walls, alert meter
-(suspicious "?" → chase "!"), crouching behind furniture taller than your eyes hides
-you, catch = 5 s knockout (+4 s immunity), red screen edges while chased.
+**Milestone 4 — DONE (playable MVP):** 12 cash stacks (`LOOT`), hold-E actions with
+progress bar (shared `findInteraction` → same prompt on client and result on server),
+knockout drops 50% of carried cash as a bag anyone can grab, exit at the main entrance
+(hold E to escape and bank), 8-minute match clock, spectator view after escaping,
+scoreboard, host can return everyone to the lobby.
 
 | # | Milestone | Status |
 |---|-----------|--------|
 | 1 | Setup, one floor, single player movement + camera + collision | ✅ |
 | 2 | Multiplayer: room links, lobby, 2+ players in sync | ✅ |
 | 3 | One guard: patrol, vision cone, chase, knockout | ✅ |
-| 4 | Cash loot, exit, scoring, scoreboard (MVP) | ⏳ |
-| 5 | Noise, alarm meter, police escape timer | |
+| 4 | Cash loot, exit, scoring, scoreboard (MVP) | ✅ |
+| 5 | Noise, alarm meter, police escape timer | ⏳ |
 | 6 | Locks, safes, paintings, vault, hiding, sabotage | |
 | 7 | Planning phase, gadgets, blueprint tablet + fog of war, emote wheel | |
 
@@ -31,7 +32,7 @@ you, catch = 5 s knockout (+4 s immunity), red screen edges while chased.
 - **Server:** Node.js 22 + Express + Socket.io (authoritative from Milestone 2).
 - **Shared code** (`/shared`) is imported by both client and server — map data,
   constants, collision and movement rules — so both always agree.
-- Dev runner: `concurrently` + Node's built-in `--watch`.
+- Dev runner: `concurrently` + `node --watch` (restarts when any imported server/shared file changes).
 
 ## How to run
 
@@ -56,6 +57,7 @@ shared/                 used by BOTH sides
                         SPAWN_POINTS → derived WALLS, DOORWAYS, COLLIDERS, roomAt()
   collision.js          circle-vs-axis-aligned-box push-out (2D floor plan)
   sight.js              raycast / hasLineOfSight / inViewCone (2D slab method)
+  interactions.js       findInteraction(actor, world) → { kind, targetId, duration, label }
   movement.js           stepMovement(state, input, dt, colliders) — pure function, sub-stepped
 server/
   index.js              Express + Socket.io event wiring (+ /health)
@@ -83,17 +85,20 @@ client/
     GameSession.js      one match on the client: prediction/reconciliation (own thief), interpolation (others)
     SnapshotBuffer.js   snapshot history + sampling at now - INTERPOLATION_DELAY
     NameTag.js          canvas sprite labels
+    LootLayer.js        loot models synced with the snapshot + highlight ring
   src/input/Input.js    keyboard (event.code → AZERTY-safe) + pointer-lock mouse
   src/ui/Hud.js         room name, stance/noise bars, server status
-  src/ui/Screens.js     menu / lobby / pause panels
+  src/ui/Screens.js     menu / lobby / pause / scoreboard panels
   src/net/Network.js    Socket.io client wrapper (requests with acks as Promises)
 
 ### Network protocol (Socket.io events)
 
 - client → server: `room:create {name}` (ack), `room:join {code,name}` (ack), `room:leave`,
-  `room:start` (host only), `inputs [{seq, forward, back, left, right, run, crouch, yaw}]`
+  `room:start` (host only), `room:lobby` (host, from scoreboard), `interact {down}`,
+  `inputs [{seq, forward, back, left, right, run, crouch, yaw}]`
 - server → client: `room:state {code, hostId, phase, players}`, `match:start {roster}`,
-  `snap {t, you:{...,seq}, players:[{id,x,z,f,m,c}]}` (20 Hz, personal per player)
+  `snap {t, timeLeft, you:{...,seq,koLeft,cash,items,banked,escaped,act}, players, guards, loot, events?}`
+  (20 Hz, personal per player), `match:end {results}`
 - Every input = exactly 1/60 s of movement; the server replays at most ~real-time worth per tick.
 ```
 

@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently -n server,client -c magenta,cyan \"npm:dev:server\" \"npm:dev:client\"",
-    "dev:server": "node --watch-path=server --watch-path=shared server/index.js",
+    "dev:server": "node --watch server/index.js",
     "dev:client": "vite",
     "build": "vite build",
     "start": "node server/index.js"

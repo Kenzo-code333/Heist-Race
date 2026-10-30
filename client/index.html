@@ -16,6 +16,16 @@
         <div class="hud-title">HEIST RACE</div>
         <div id="hud-room">—</div>
       </div>
+      <div id="hud-top-center"><div id="hud-timer">8:00</div></div>
+      <div id="hud-bottom-right">
+        <div class="hud-small">CARRYING</div>
+        <div id="hud-carried">$0</div>
+        <div class="hud-small" id="hud-banked"></div>
+      </div>
+      <div id="hud-prompt" class="hidden">
+        <span class="key">E</span><span id="hud-prompt-label"></span>
+        <div id="hud-progress"><div id="hud-progress-fill"></div></div>
+      </div>
       <div id="hud-top-right">
         <span id="hud-server-dot" class="dot"></span>
         <span id="hud-server-text">Server: connecting…</span>
@@ -73,8 +83,18 @@
           <tr><td>Mouse</td><td>Look around</td></tr>
           <tr><td>Shift (hold)</td><td>Run — loud</td></tr>
           <tr><td>C</td><td>Toggle crouch-sneak — silent</td></tr>
+          <tr><td>E (hold)</td><td>Grab loot / escape at the exit</td></tr>
           <tr><td>Esc</td><td>Release the mouse</td></tr>
         </table>
+      </div>
+
+      <!-- 4) Scoreboard at the end of a match -->
+      <div class="overlay-card screen hidden" id="screen-scoreboard">
+        <h1>HEIST OVER</h1>
+        <p class="subtitle" id="score-winner"></p>
+        <table id="score-table"></table>
+        <button id="score-lobby" class="primary">Back to the lobby</button>
+        <p id="score-wait" class="subtitle">Waiting for the host…</p>
       </div>
     </div>
 

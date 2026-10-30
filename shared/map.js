@@ -170,6 +170,30 @@ export const DECOR = [
   { type: 'rug', x: 15, z: 10, w: 28, d: 1.6, style: 'runner' },
 ];
 
+// ---------------------------------------------------------------------------
+// 5) LOOT: what thieves can steal. `y` = height it rests at (on a desk, on the
+//    floor...). Values are in dollars.
+// ---------------------------------------------------------------------------
+export const LOOT = [
+  { id: 'c1', type: 'cash', x: 3.0, y: 0.77, z: 2.4, value: 400 },    // office desks
+  { id: 'c2', type: 'cash', x: 6.4, y: 0.77, z: 2.4, value: 350 },
+  { id: 'c3', type: 'cash', x: 2.2, y: 0.77, z: 5.2, value: 450 },
+  { id: 'c4', type: 'cash', x: 10.7, y: 0, z: 1.2, value: 300 },     // by the filing cabinets
+  { id: 'c5', type: 'cash', x: 3.0, y: 1.1, z: 15.4, value: 500 },   // reception counter
+  { id: 'c6', type: 'cash', x: 9.9, y: 0.42, z: 17.8, value: 300 },  // lobby coffee table
+  { id: 'c7', type: 'cash', x: 17.8, y: 0, z: 17.6, value: 600 },    // storage, by the rack
+  { id: 'c8', type: 'cash', x: 13.0, y: 0.9, z: 13.0, value: 450 },  // storage, on a crate
+  { id: 'c9', type: 'cash', x: 21.4, y: 0.77, z: 13.8, value: 700 }, // vault room desk
+  { id: 'c10', type: 'cash', x: 26.5, y: 0, z: 19.0, value: 800 },   // by the deposit boxes
+  { id: 'c11', type: 'cash', x: 21.5, y: 0.45, z: 4.25, value: 550 },// gallery bench
+  { id: 'c12', type: 'cash', x: 17, y: 0, z: 11.4, value: 250 },     // corridor floor (on the guard route!)
+];
+
+// EXITS: walk up and hold E to escape with everything you carry.
+export const EXITS = [
+  { id: 'main', name: 'Main entrance', x: 6, z: 19.3, radius: 1.7 },
+];
+
 // GUARD PATROL ROUTES: each guard walks between its waypoints in a loop
 // (the server finds the way around walls by itself). `wait` = seconds spent
 // standing and looking around at that point.
@@ -185,8 +209,8 @@ export const GUARD_ROUTES = [
 
 // Where players appear at the start: one spot per player slot (max 6).
 export const SPAWN_POINTS = [
-  { x: 6, z: 18 }, { x: 7.2, z: 18 }, { x: 4.8, z: 18 },
-  { x: 6, z: 17 }, { x: 7.2, z: 17 }, { x: 4.8, z: 17 },
+  { x: 6, z: 17.0 }, { x: 7.2, z: 17.0 }, { x: 4.8, z: 17.0 },
+  { x: 6, z: 16.1 }, { x: 7.2, z: 16.1 }, { x: 4.8, z: 16.1 },
 ];
 
 // ===========================================================================
