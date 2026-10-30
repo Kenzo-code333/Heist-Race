@@ -1,0 +1,49 @@
+/* ==========================================================================
+   Heist Race — page and HUD styles
+   ========================================================================== */
+:root {
+  --ink: #e9e4d8;
+  --muted: #9a958a;
+  --accent: #e8b04a;        /* warm "gold" accent */
+  --danger: #e0533d;
+  --panel: rgba(12, 13, 16, 0.72);
+  --font: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #050506; color: var(--ink); font-family: var(--font); }
+#game, #game canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+/* ---------- HUD ---------- */
+#hud { position: fixed; inset: 0; pointer-events: none; user-select: none; }
+#hud-top-left { position: absolute; top: 18px; left: 22px; }
+.hud-title { font-family: var(--mono); font-size: 12px; letter-spacing: 0.35em; color: var(--accent); }
+#hud-room { font-size: 22px; font-weight: 600; margin-top: 4px; text-shadow: 0 2px 8px #000; }
+#hud-top-right { position: absolute; top: 18px; right: 22px; font-family: var(--mono); font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.dot.online { background: #5fd37a; box-shadow: 0 0 8px #5fd37a; }
+.dot.offline { background: var(--danger); }
+
+#hud-bottom-left { position: absolute; left: 22px; bottom: 22px; background: var(--panel); padding: 12px 16px; border-left: 3px solid var(--accent); min-width: 170px; }
+#hud-stance-label { font-family: var(--mono); font-size: 14px; letter-spacing: 0.2em; }
+#hud-stance-bars { display: flex; gap: 4px; margin: 8px 0 4px; }
+#hud-stance-bars span { width: 34px; height: 6px; background: rgba(255,255,255,0.12); transition: background 0.15s; }
+#hud-stance-bars span.on { background: var(--accent); }
+#hud-stance-bars.loud span.on { background: var(--danger); }
+#hud-stance-hint { font-size: 11px; color: var(--muted); }
+
+#hud-crosshair { position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 50%; background: rgba(255,255,255,0.55); }
+
+/* ---------- Start overlay ---------- */
+#overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: radial-gradient(ellipse at center, rgba(5,5,6,0.55), rgba(5,5,6,0.9)); }
+#overlay.hidden { display: none; }
+.overlay-card { background: var(--panel); border: 1px solid rgba(232,176,74,0.35); padding: 32px 40px; max-width: 460px; width: calc(100% - 32px); text-align: center; backdrop-filter: blur(6px); }
+.overlay-card h1 { margin: 0; font-family: var(--mono); letter-spacing: 0.4em; color: var(--accent); font-size: 30px; }
+.subtitle { color: var(--muted); margin: 6px 0 22px; }
+#play-button { font: inherit; font-size: 16px; font-weight: 600; padding: 12px 28px; background: var(--accent); color: #17130a; border: 0; cursor: pointer; letter-spacing: 0.05em; }
+#play-button:disabled { opacity: 0.4; cursor: wait; }
+.controls { margin: 24px auto 0; border-collapse: collapse; font-size: 13px; text-align: left; }
+.controls td { padding: 4px 10px; }
+.controls td:first-child { font-family: var(--mono); color: var(--accent); white-space: nowrap; }
+#loading-text { font-size: 12px; color: var(--muted); margin: 18px 0 0; min-height: 1em; }
