@@ -93,12 +93,13 @@ export class Screens {
   }
 
   /** Fill and show the end-of-match scoreboard. */
-  showScoreboard(results, isHost) {
+  showScoreboard(results, isHost, reason) {
     const money = (v) => `$${v.toLocaleString('en-US')}`;
     const winner = results.find((r) => r.escaped && r.score > 0);
-    $('score-winner').textContent = winner
+    const why = { police: 'The police stormed the building. ', time: 'Time ran out. ', allOut: '' }[reason] ?? '';
+    $('score-winner').textContent = why + (winner
       ? `${winner.name} wins with ${money(winner.score)}!`
-      : 'Nobody made it out with any loot.';
+      : 'Nobody made it out with any loot.');
 
     const table = $('score-table');
     table.innerHTML = '';

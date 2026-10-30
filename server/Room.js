@@ -62,7 +62,7 @@ export class Room {
   start(byId) {
     if (byId !== this.hostId || this.phase !== 'lobby') return;
     this.phase = 'playing';
-    this.match = new Match([...this.players.values()], (results) => this.endMatch(results));
+    this.match = new Match([...this.players.values()], (results, reason) => this.endMatch(results, reason));
     this.io.to(this.code).emit('match:start', { roster: this.roster() });
     this.broadcastRoomState();
   }
@@ -76,11 +76,11 @@ export class Room {
   }
 
   /** Called by the Match when it's over. */
-  endMatch(results) {
+  endMatch(results, reason) {
     this.phase = 'ended';
     // Send one last snapshot so everyone sees the final state, then the results.
     for (const player of this.players.values()) player.socket.emit('snap', this.match.snapshotFor(player.id));
-    this.io.to(this.code).emit('match:end', { results });
+    this.io.to(this.code).emit('match:end', { results, reason });
     this.match = null;
     this.broadcastRoomState();
   }

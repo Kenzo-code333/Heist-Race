@@ -58,3 +58,24 @@ export const REACH = 1.5;            // how close you must be to interact (m)
 export const MATCH_DURATION = 8 * 60; // seconds; thieves still inside at the end lose their loot
 export const KNOCKOUT_DROP_SHARE = 0.5; // share of carried cash dropped when knocked out
 export const ACTION_TIME = { grabCash: 1.0, escape: 1.5 }; // seconds of holding E
+
+// --- Noise ---------------------------------------------------------------------
+// How far (m) a noise carries. Guards inside the radius come to investigate;
+// other thieves see a ripple. Walls muffle noise (radius x WALL_MUFFLE).
+export const NOISE_RADIUS = { sneak: 0, walk: 2.5, run: 8 };
+export const NOISE_PULSE_INTERVAL = 0.6; // a moving thief "emits" a noise this often (s)
+export const WALL_MUFFLE = 0.6;
+export const PLAYER_HEARING_BONUS = 4;   // thieves hear noises this much further than guards
+
+// --- Alarm & police -------------------------------------------------------------
+export const ALARM = {
+  guardHearsNoise: 1.5,   // + per noise a guard reacts to
+  guardStartsChase: 12,   // + when a guard starts chasing someone
+  chasePerSecond: 1,      // + per second while any guard is chasing
+  cameraPerSecond: 9,     // + per second while a camera sees a thief
+  knockout: 5,            // + when someone gets knocked out
+};
+export const POLICE_COUNTDOWN = 60; // seconds to escape once the alarm hits 100%
+
+// --- Security cameras ---------------------------------------------------------------
+export const CAMERA = { range: 10, halfAngle: 0.42, sweepPeriod: 9 };

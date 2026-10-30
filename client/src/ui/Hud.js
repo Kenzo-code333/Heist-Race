@@ -26,6 +26,10 @@ export class Hud {
     this.toastEl = document.getElementById('hud-toast');
     this.toastTimer = null;
     this.timerEl = document.getElementById('hud-timer');
+    this.alarmFill = document.getElementById('hud-alarm-fill');
+    this.alarmLabel = document.getElementById('hud-alarm-label');
+    this.policeEl = document.getElementById('hud-police');
+    this.policeTime = document.getElementById('hud-police-time');
     this.carriedEl = document.getElementById('hud-carried');
     this.bankedEl = document.getElementById('hud-banked');
     this.promptEl = document.getElementById('hud-prompt');
@@ -58,7 +62,11 @@ export class Hud {
 
   setVisible(visible) {
     this.root.classList.toggle('hidden', !visible);
-    if (!visible) this.setDanger(false);
+    if (!visible) {
+      this.setDanger(false);
+      document.body.classList.remove('police');
+      this.last = {};
+    }
   }
 
   /** Big text in the middle of the screen ('' to clear). */
@@ -83,6 +91,18 @@ export class Hud {
     this.last.timer = text;
     this.timerEl.textContent = text;
     this.timerEl.classList.toggle('urgent', secondsLeft <= 60);
+  }
+
+  /** Shared alarm meter (0..100) and the police countdown (seconds or null). */
+  setAlarm(alarm, police) {
+    const key = `${alarm}|${police}`;
+    if (this.last.alarm === key) return;
+    this.last.alarm = key;
+    this.alarmFill.style.width = `${alarm}%`;
+    this.alarmLabel.textContent = `ALARM ${alarm}%`;
+    this.policeEl.classList.toggle('hidden', police === null);
+    if (police !== null) this.policeTime.textContent = police;
+    document.body.classList.toggle('police', police !== null);
   }
 
   setLoot(carried, banked) {

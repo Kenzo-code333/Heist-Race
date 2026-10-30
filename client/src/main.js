@@ -83,9 +83,9 @@ network.on('room:state', (state) => {
   if (state.phase === 'lobby' && screens.current === 'scoreboard') screens.show('lobby');
 });
 
-network.on('match:end', ({ results }) => {
+network.on('match:end', ({ results, reason }) => {
   endSession();
-  screens.showScoreboard(results, roomState?.hostId === network.id);
+  screens.showScoreboard(results, roomState?.hostId === network.id, reason);
 });
 
 // E pressed / released → tell the server (it decides what happens).

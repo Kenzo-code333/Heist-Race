@@ -20,10 +20,13 @@
 
 import * as THREE from 'three';
 import { stepMovement, facingFromDirection } from '../../../shared/movement.js';
-import { COLLIDERS, EXITS, roomAt } from '../../../shared/map.js';
+import { COLLIDERS, EXITS, SECURITY_CAMERAS, roomAt } from '../../../shared/map.js';
+import { NoiseRipples } from './NoiseRipples.js';
+import { CameraView } from './CameraView.js';
+import { Sounds } from './Sounds.js';
 import { findInteraction } from '../../../shared/interactions.js';
 import { LootLayer } from './LootLayer.js';
-import { INPUT_DT, INTERPOLATION_DELAY } from '../../../shared/constants.js';
+import { INPUT_DT, INTERPOLATION_DELAY, NOISE_RADIUS, NOISE_PULSE_INTERVAL } from '../../../shared/constants.js';
 import { CharacterModel } from './CharacterModel.js';
 import { GuardView } from './GuardView.js';
 import { ThirdPersonCamera } from './ThirdPersonCamera.js';
@@ -64,6 +67,12 @@ export class GameSession {
     this.timeLeft = 0;
     this.loot = new LootLayer(renderer.scene);
     this.lootList = [];
+    this.alarm = 0;
+    this.police = null;
+    this.ripples = new NoiseRipples(renderer.scene);
+    this.ownNoiseTimer = 0;
+    this.sounds = new Sounds();
+    this.cameraViews = new Map(SECURITY_CAMERAS.map((def) => [def.id, new CameraView(renderer.scene, def)]));
 
     // --- Everyone else (interpolated) ---
     this.others = new Map(); // id -> { model, tag, facing, lastX, lastZ, speed }
@@ -84,6 +93,9 @@ export class GameSession {
     for (const guard of this.guards.values()) guard.dispose();
     this.guards.clear();
     this.loot.dispose();
+    this.ripples.dispose();
+    for (const view of this.cameraViews.values()) view.dispose();
+    this.sounds.setSiren(false);
   }
 
   // ------------------------------------------------------------------ network
@@ -93,6 +105,10 @@ export class GameSession {
     if (!you) return;
     this.myState = you;
     this.timeLeft = snap.timeLeft;
+    this.alarm = snap.alarm ?? 0;
+    this.police = snap.police ?? null;
+    this.sounds.setSiren(this.police !== null);
+    for (const c of snap.cameras ?? []) this.cameraViews.get(c.id)?.update(c);
     this.lootList = snap.loot ?? [];
     for (const event of snap.events ?? []) this.handleEvent(event);
 
@@ -115,7 +131,10 @@ export class GameSession {
 
   /** One-off messages from the server. */
   handleEvent(event) {
-    if (event.type === 'spotted') this.hud.toast('A guard spotted you — RUN!');
+    if (event.type === 'spotted') { this.hud.toast('A guard spotted you — RUN!'); this.sounds.beep(980, 0.25); }
+    if (event.type === 'camera') this.hud.toast('A security camera sees you!', 2);
+    if (event.type === 'noise') this.ripples.add(event.x, event.z, event.r, event.kind);
+    if (event.type === 'police') this.hud.toast('ALARM 100% — the police are coming! Get out!', 5);
     if (event.type === 'knockedOut') {
       this.hud.toast(event.dropped > 0 ? `Knocked out! You dropped $${event.dropped}.` : 'A guard knocked you out!', 4);
     }
@@ -188,6 +207,15 @@ export class GameSession {
       this.updateGuards(dt, sample);
     }
 
+    // Show your own footstep noise as a faint blue ring (same rules as the server).
+    this.ownNoiseTimer -= dt;
+    const ownRadius = knockedOut ? 0 : NOISE_RADIUS[this.me.moveMode] ?? 0;
+    if (ownRadius > 0 && this.ownNoiseTimer <= 0) {
+      this.ownNoiseTimer = NOISE_PULSE_INTERVAL;
+      this.ripples.add(drawX, drawZ, ownRadius, 'self');
+    }
+    this.ripples.update(dt);
+
     // 4) Loot and the "E" prompt
     const option = knockedOut ? null : findInteraction({ x: drawX, z: drawZ }, { loot: this.lootList, exits: EXITS });
     const act = this.myState.act;
@@ -197,6 +225,7 @@ export class GameSession {
 
     // 5) HUD
     this.hud.setTimer(this.timeLeft);
+    this.hud.setAlarm(this.alarm, this.police);
     this.hud.setLoot(this.carriedValue(), this.myState.banked);
     this.hud.setRoom(roomAt(drawX, drawZ)?.name ?? '—');
     this.hud.setStance(this.me.moveMode, this.me.crouching);
@@ -226,6 +255,8 @@ export class GameSession {
       this.updateGuards(dt, sample);
     }
     this.loot.sync(this.lootList, null);
+    this.ripples.update(dt);
+    this.hud.setAlarm(this.alarm, this.police);
     this.hud.setPrompt(null);
     this.hud.setDanger(false);
     this.hud.setTimer(this.timeLeft);

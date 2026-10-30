@@ -8,8 +8,13 @@
 import { Thief } from './entities/Thief.js';
 import { Guard } from './entities/Guard.js';
 import { NavGrid } from './ai/NavGrid.js';
-import { COLLIDERS, SPAWN_POINTS, GUARD_ROUTES, LOOT, EXITS, visionBlockers } from '../shared/map.js';
-import { GUARD, MATCH_DURATION, KNOCKOUT_DROP_SHARE } from '../shared/constants.js';
+import { COLLIDERS, WALLS, SPAWN_POINTS, GUARD_ROUTES, LOOT, EXITS, SECURITY_CAMERAS, visionBlockers } from '../shared/map.js';
+import { SecurityCamera } from './entities/SecurityCamera.js';
+import {
+  GUARD, CAMERA, MATCH_DURATION, KNOCKOUT_DROP_SHARE, NOISE_RADIUS, NOISE_PULSE_INTERVAL, WALL_MUFFLE,
+  PLAYER_HEARING_BONUS, ALARM, POLICE_COUNTDOWN,
+} from '../shared/constants.js';
+import { hasLineOfSight } from '../shared/sight.js';
 import { findInteraction } from '../shared/interactions.js';
 
 // The pathfinding grid only depends on the (static) map: build it once.
@@ -34,6 +39,9 @@ export class Match {
     this.loot = new Map(LOOT.map((item) => [item.id, { ...item }]));
     this.nextLootId = 1;
     this.exits = EXITS;
+    this.cameras = SECURITY_CAMERAS.map((def) => new SecurityCamera(def));
+    this.alarm = 0;              // 0..100, shared by the whole building
+    this.policeTimer = null;     // seconds until the police storm in (null = not called yet)
   }
 
   handleInput(id, input) {
@@ -59,9 +67,79 @@ export class Match {
       if (!thief.isActive()) continue;
       thief.processInputs(dt, this.colliders, this.time);
       this.updateAction(thief, dt);
+      this.updateFootsteps(thief, dt);
     }
     for (const guard of this.guards) guard.update(dt, this);
+    for (const camera of this.cameras) {
+      camera.update(dt, this);
+      if (camera.seeing) this.raiseAlarm(ALARM.cameraPerSecond * dt);
+    }
+    if (this.guards.some((g) => g.state === 'chase')) this.raiseAlarm(ALARM.chasePerSecond * dt);
+    this.updatePolice(dt);
     this.checkEnd();
+  }
+
+  // ------------------------------------------------------------- noise
+  /** Walking and running make footstep noise every NOISE_PULSE_INTERVAL seconds. */
+  updateFootsteps(thief, dt) {
+    thief.noiseTimer -= dt;
+    const radius = NOISE_RADIUS[thief.moveMode] ?? 0;
+    if (radius <= 0 || thief.noiseTimer > 0) return;
+    thief.noiseTimer = NOISE_PULSE_INTERVAL;
+    this.makeNoise(thief.x, thief.z, radius, thief.id, thief.moveMode);
+  }
+
+  /**
+   * Something made a noise at (x, z) audible up to `radius` metres.
+   * Walls muffle it. Calm guards who hear it come and investigate; other
+   * thieves nearby see a ripple (that's how you can "hear" rivals).
+   * @param {string|null} sourceId - thief who made it (they don't get their own ripple)
+   */
+  makeNoise(x, z, radius, sourceId = null, kind = 'noise') {
+    const effectiveRadius = (lx, lz) => (hasLineOfSight(x, z, lx, lz, WALLS) ? radius : radius * WALL_MUFFLE);
+
+    // Guards: the closest calm guard that hears it goes to look.
+    let closest = null, closestDist = Infinity;
+    for (const guard of this.guards) {
+      const d = Math.hypot(guard.x - x, guard.z - z);
+      if (d <= effectiveRadius(guard.x, guard.z) && d < closestDist) { closest = guard; closestDist = d; }
+    }
+    if (closest && sourceId !== 'guard' && closest.hearNoise(x, z)) this.raiseAlarm(ALARM.guardHearsNoise);
+
+    // Thieves: remember the noise to send as a ripple in their next snapshot.
+    for (const thief of this.thieves.values()) {
+      if (thief.id === sourceId || !thief.isActive()) continue;
+      const d = Math.hypot(thief.x - x, thief.z - z);
+      if (d <= effectiveRadius(thief.x, thief.z) + PLAYER_HEARING_BONUS) {
+        thief.events.push({ type: 'noise', x: Math.round(x * 10) / 10, z: Math.round(z * 10) / 10, r: radius, kind });
+      }
+    }
+  }
+
+  /** Send the nearest calm guard to check a spot (used by cameras). */
+  callNearestGuard(x, z) {
+    const calm = this.guards.filter((g) => g.state !== 'chase' && g.state !== 'suspicious');
+    calm.sort((a, b) => Math.hypot(a.x - x, a.z - z) - Math.hypot(b.x - x, b.z - z));
+    calm[0]?.hearNoise(x, z);
+  }
+
+  // ------------------------------------------------------------- alarm & police
+  raiseAlarm(amount) {
+    if (this.alarm >= 100) return;
+    this.alarm = Math.min(100, this.alarm + amount);
+    if (this.alarm >= 100 && this.policeTimer === null) {
+      this.policeTimer = POLICE_COUNTDOWN;
+      for (const thief of this.thieves.values()) thief.events.push({ type: 'police' });
+    }
+  }
+
+  updatePolice(dt) {
+    if (this.policeTimer === null) return;
+    this.policeTimer -= dt;
+    if (this.policeTimer <= 0) {
+      this.policeTimer = 0;
+      this.finish('police');
+    }
   }
 
   // ------------------------------------------------------------- hold-E actions
@@ -132,6 +210,12 @@ export class Match {
   // ------------------------------------------------------------- game events
   onGuardSpotted(guard, thief) {
     thief.events.push({ type: 'spotted' });
+    this.raiseAlarm(ALARM.guardStartsChase);
+  }
+
+  /** How far cameras see at a spot (Milestone 6: 0 in dark rooms). */
+  cameraRangeAt() {
+    return CAMERA.range;
   }
 
   /** A guard caught a thief: they drop part of their loot on the floor. */
@@ -144,6 +228,7 @@ export class Match {
       this.dropLoot({ type: 'cash', value: dropped }, thief.x, thief.z);
     }
     thief.events.push({ type: 'knockedOut', dropped });
+    this.raiseAlarm(ALARM.knockout);
   }
 
   /** Put an item on the floor near (x, z), up for grabs by anyone. */
@@ -155,10 +240,12 @@ export class Match {
   // ------------------------------------------------------------- end of match
   checkEnd() {
     const inside = [...this.thieves.values()].filter((t) => t.isActive());
-    if (inside.length === 0 || this.time >= MATCH_DURATION) this.finish();
+    if (inside.length === 0) this.finish('allOut');
+    else if (this.time >= MATCH_DURATION) this.finish('time');
   }
 
-  finish() {
+  /** @param {'allOut'|'time'|'police'} reason */
+  finish(reason) {
     if (this.over) return;
     this.over = true;
     // Thieves still inside lose everything they carry.
@@ -169,7 +256,7 @@ export class Match {
       lost: t.escaped ? 0 : t.carriedValue(),
     }));
     results.sort((a, b) => b.score - a.score);
-    this.onEnd(results);
+    this.onEnd(results, reason);
   }
 
   // ------------------------------------------------------------- snapshots
@@ -186,6 +273,9 @@ export class Match {
       you: you?.privateState(),
       players,
       guards: this.guards.map((g) => g.publicState(id)),
+      cameras: this.cameras.map((c) => c.publicState(this.time)),
+      alarm: Math.floor(this.alarm),
+      police: this.policeTimer === null ? null : Math.ceil(this.policeTimer),
       loot: [...this.loot.values()].map((l) => ({ id: l.id, type: l.type, x: l.x, y: l.y, z: l.z, value: l.value, dropped: l.dropped })),
     };
     if (you?.events.length) {

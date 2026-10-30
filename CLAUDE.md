@@ -10,11 +10,11 @@ ambiguous pick the simplest option and say so.
 
 ## Current milestone
 
-**Milestone 4 — DONE (playable MVP):** 12 cash stacks (`LOOT`), hold-E actions with
-progress bar (shared `findInteraction` → same prompt on client and result on server),
-knockout drops 50% of carried cash as a bag anyone can grab, exit at the main entrance
-(hold E to escape and bank), 8-minute match clock, spectator view after escaping,
-scoreboard, host can return everyone to the lobby.
+**Milestone 5 — DONE:** footstep noise pulses (sneak 0 m, walk 2.5 m, run 8 m; walls
+muffle ×0.6), calm guards investigate noises, rivals see noise ripples (you see your
+own as blue rings), 3 sweeping security cameras, shared alarm meter (sightings,
+chases, noises, knockouts, cameras), at 100% a 60 s police countdown + siren; anyone
+still inside when it ends loses their loot. Scoreboard says why the match ended.
 
 | # | Milestone | Status |
 |---|-----------|--------|
@@ -22,8 +22,8 @@ scoreboard, host can return everyone to the lobby.
 | 2 | Multiplayer: room links, lobby, 2+ players in sync | ✅ |
 | 3 | One guard: patrol, vision cone, chase, knockout | ✅ |
 | 4 | Cash loot, exit, scoring, scoreboard (MVP) | ✅ |
-| 5 | Noise, alarm meter, police escape timer | ⏳ |
-| 6 | Locks, safes, paintings, vault, hiding, sabotage | |
+| 5 | Noise, alarm meter, police escape timer | ✅ |
+| 6 | Locks, safes, paintings, vault, hiding, sabotage | ⏳ |
 | 7 | Planning phase, gadgets, blueprint tablet + fog of war, emote wheel | |
 
 ## Stack
@@ -65,7 +65,8 @@ server/
   Room.js               lobby → playing phases, host, roster, sends per-player snapshots
   Match.js              the authoritative heist simulation for one room
   entities/Thief.js     server-side thief: validated input queue, rate-limited replay, knockout
-  entities/Guard.js     guard state machine: patrol → suspicious → chase → search → return
+  entities/Guard.js     guard state machine: patrol → suspicious → chase → search → return (+ investigate)
+  entities/SecurityCamera.js sweeping camera: sees thieves → alarm + calls nearest guard
   ai/NavGrid.js         0.5 m grid + A* + path smoothing (built once from COLLIDERS)
 client/
   index.html            canvas container, HUD, start overlay
@@ -81,6 +82,9 @@ client/
     CharacterModel.js   jointed character (outfit 'thief' | 'guard') + walk/run/crouch/knockout animation
     GuardView.js        guard model + flashlight SpotLight + VisionCone + ?/! icon
     VisionCone.js       fan of rays → translucent floor shape
+    CameraView.js       security camera model + red cone
+    NoiseRipples.js     expanding floor rings for heard noises
+    Sounds.js           Web Audio siren + beeps (no audio files)
     ThirdPersonCamera.js yaw/pitch orbit camera, shoulder offset, ray-vs-Box3 wall avoidance
     GameSession.js      one match on the client: prediction/reconciliation (own thief), interpolation (others)
     SnapshotBuffer.js   snapshot history + sampling at now - INTERPOLATION_DELAY

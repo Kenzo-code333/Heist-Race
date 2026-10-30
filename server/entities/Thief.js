@@ -35,6 +35,7 @@ export class Thief {
     this.escaped = false;
 
     // Hold-E actions
+    this.noiseTimer = 0;       // time until the next footstep noise pulse
     this.interactHeld = false; // is the player holding E right now?
     this.action = null;        // { kind, targetId, duration, label, progress, startX, startZ }
   }

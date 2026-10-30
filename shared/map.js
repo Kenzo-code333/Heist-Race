@@ -162,8 +162,6 @@ export const DECOR = [
   { type: 'exitSign', x: 6, z: 11.9, y: 2.5, face: 'n' },
   { type: 'extinguisher', x: 10, z: 8.1, y: 0.5, face: 's' },
   { type: 'extinguisher', x: 20, z: 11.9, y: 0.5, face: 'n' },
-  { type: 'securityCamera', x: 29.9, z: 8.2, y: 2.75, face: 'w' },
-  { type: 'securityCamera', x: 12.1, z: 0.2, y: 2.75, face: 'e' },
   // Lobby rug
   { type: 'rug', x: 9.6, z: 18.4, w: 3.2, d: 2.4 },
   // Long carpet runner down the corridor
@@ -192,6 +190,15 @@ export const LOOT = [
 // EXITS: walk up and hold E to escape with everything you carry.
 export const EXITS = [
   { id: 'main', name: 'Main entrance', x: 6, z: 19.3, radius: 1.7 },
+];
+
+// SECURITY CAMERAS: mounted high in a corner, sweeping left and right.
+//   yaw = centre direction (0 = looking towards -z, PI/2 = towards -x)
+//   sweep = how far it turns each way (radians)
+export const SECURITY_CAMERAS = [
+  { id: 'cam1', x: 29.8, z: 8.3, y: 2.7, yaw: Math.PI / 2, sweep: 0.55 },            // corridor, east end, looking west
+  { id: 'cam2', x: 12.25, z: 0.25, y: 2.7, yaw: -Math.PI * 0.75, sweep: 0.5 },       // gallery, NW corner
+  { id: 'cam3', x: 29.75, z: 12.25, y: 2.7, yaw: Math.PI * 0.75, sweep: 0.5 },       // vault room, NE corner
 ];
 
 // GUARD PATROL ROUTES: each guard walks between its waypoints in a loop

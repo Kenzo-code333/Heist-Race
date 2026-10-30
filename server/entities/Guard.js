@@ -227,6 +227,19 @@ export class Guard {
     }
   }
 
+  /**
+   * A noise was heard at (x, z). Calm guards go and check it out; guards
+   * already watching or chasing someone ignore it.
+   * @returns {boolean} true if the guard reacts
+   */
+  hearNoise(x, z) {
+    if (this.state === 'suspicious' || this.state === 'chase') return false;
+    this.investigateSpot = { x, z };
+    this.reachedSearchSpot = false;
+    this.setState('investigate');
+    return true;
+  }
+
   closestWaypoint() {
     let best = 0, bestD = Infinity;
     this.waypoints.forEach((wp, i) => {

@@ -16,7 +16,11 @@
         <div class="hud-title">HEIST RACE</div>
         <div id="hud-room">—</div>
       </div>
-      <div id="hud-top-center"><div id="hud-timer">8:00</div></div>
+      <div id="hud-top-center">
+        <div id="hud-timer">8:00</div>
+        <div id="hud-alarm"><div id="hud-alarm-fill"></div><span id="hud-alarm-label">ALARM 0%</span></div>
+        <div id="hud-police" class="hidden">POLICE ARRIVING — <span id="hud-police-time">60</span>s</div>
+      </div>
       <div id="hud-bottom-right">
         <div class="hud-small">CARRYING</div>
         <div id="hud-carried">$0</div>
@@ -82,7 +86,7 @@
           <tr><td>W A S D</td><td>Move (Z Q S D on AZERTY)</td></tr>
           <tr><td>Mouse</td><td>Look around</td></tr>
           <tr><td>Shift (hold)</td><td>Run — loud</td></tr>
-          <tr><td>C</td><td>Toggle crouch-sneak — silent</td></tr>
+          <tr><td>C</td><td>Toggle crouch-sneak — silent (walking is quiet, running is loud)</td></tr>
           <tr><td>E (hold)</td><td>Grab loot / escape at the exit</td></tr>
           <tr><td>Esc</td><td>Release the mouse</td></tr>
         </table>
