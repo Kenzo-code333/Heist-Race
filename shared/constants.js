@@ -94,3 +94,29 @@ export const POLICE_COUNTDOWN = 60; // seconds to escape once the alarm hits 100
 
 // --- Security cameras ---------------------------------------------------------------
 export const CAMERA = { range: 10, halfAngle: 0.42, sweepPeriod: 9 };
+
+// --- Planning phase & gadgets --------------------------------------------------
+export const PLANNING_TIME = 60;   // seconds to choose an entry point and gadgets
+export const GADGET_SLOTS = 2;
+export const SPAWN_IMMUNITY = 4;   // guards ignore thieves for the first seconds
+// active = used with keys 1 / 2 (single use); passive = always on
+export const GADGETS = {
+  smoke:    { name: 'Smoke bomb',     active: true,  desc: 'A thick cloud (2.5 m) that blocks guards\' and cameras\' sight for 12 s.' },
+  decoy:    { name: 'Decoy noise',    active: true,  desc: 'Thrown 7 m ahead; a loud bang 1.5 s later lures guards there.' },
+  jammer:   { name: 'Camera jammer',  active: true,  desc: 'Disables every camera within 12 m for 25 s.' },
+  lockpick: { name: 'Lockpick kit',   active: false, desc: 'Pick locks 2.5x faster and crack safes/the vault 1.5x faster.' },
+  grapple:  { name: 'Grappling hook', active: false, desc: 'Unlocks the gallery skylight as an entry point and exit.' },
+};
+export const SMOKE = { radius: 2.5, duration: 12 };
+export const DECOY = { distance: 7, delay: 1.5, radius: 12 };
+export const JAMMER = { radius: 12, duration: 25 };
+
+// --- Fog of war (what each player is told about rival thieves) -------------------
+export const SIGHT = { range: 18, darkRange: 5, closeRange: 2.5 };
+
+// --- Emotes / chat wheel -----------------------------------------------------------
+export const EMOTES = [
+  { id: 'alliance', text: 'Alliance?' }, { id: 'yes', text: 'Deal!' }, { id: 'follow', text: 'Follow me' },
+  { id: 'guard', text: 'Guard here!' }, { id: 'no', text: 'No way' }, { id: 'split', text: 'Split up' },
+  { id: 'help', text: 'Help!' }, { id: 'betray', text: 'Sorry, partner…' },
+];

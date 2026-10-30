@@ -33,6 +33,7 @@ export class SecurityCamera {
       if (!thief.isTargetable(match.time)) continue;
       if (!inViewCone(this.x, this.z, this.facing, thief.x, thief.z, range, CAMERA.halfAngle)) continue;
       if (!hasLineOfSight(this.x, this.z, thief.x, thief.z, match.visionBlockersFor(thief.crouching))) continue;
+      if (match.smokeBlocks(this.x, this.z, thief.x, thief.z)) continue;
       this.seeing = true;
       // Every 2 seconds while it sees someone, call the nearest guard over.
       this.callTimer -= dt;

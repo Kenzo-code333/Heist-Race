@@ -20,14 +20,20 @@
 
 import * as THREE from 'three';
 import { stepMovement, facingFromDirection, restrictInput } from '../../../shared/movement.js';
-import { COLLIDERS, EXITS, SECURITY_CAMERAS, VISION_BLOCKERS_STANDING, withClosedDoors, roomAt } from '../../../shared/map.js';
+import { COLLIDERS, WALLS, EXITS, SECURITY_CAMERAS, VISION_BLOCKERS_STANDING, withClosedDoors, roomAt } from '../../../shared/map.js';
+import { FogOfWar } from './FogOfWar.js';
+import { SmokeLayer, DecoyLayer, createBubble } from './Effects.js';
+import { Tablet } from '../ui/Tablet.js';
+import { EmoteWheel } from '../ui/EmoteWheel.js';
 import { animateDoor } from './LevelBuilder.js';
 import { NoiseRipples } from './NoiseRipples.js';
 import { CameraView } from './CameraView.js';
 import { Sounds } from './Sounds.js';
 import { findInteraction } from '../../../shared/interactions.js';
 import { LootLayer } from './LootLayer.js';
-import { INPUT_DT, INTERPOLATION_DELAY, NOISE_RADIUS, NOISE_PULSE_INTERVAL, GUARD, CAMERA, DARK_VISION_RANGE } from '../../../shared/constants.js';
+import {
+  INPUT_DT, INTERPOLATION_DELAY, NOISE_RADIUS, NOISE_PULSE_INTERVAL, GUARD, CAMERA, DARK_VISION_RANGE, GADGETS, EMOTES,
+} from '../../../shared/constants.js';
 import { CharacterModel } from './CharacterModel.js';
 import { GuardView } from './GuardView.js';
 import { ThirdPersonCamera } from './ThirdPersonCamera.js';
@@ -94,6 +100,22 @@ export class GameSession {
     this.colliders = COLLIDERS; // walls + furniture + currently closed doors
     this.visionBlockers = VISION_BLOCKERS_STANDING;
     this.openAmounts = {};  // smoothed 0..1 opening of safes / vault
+    this.sightBlockers = WALLS; // what blocks YOUR view for the fog of war (walls + closed doors)
+
+    // Milestone 7: fog of war + tablet, gadgets, chat wheel
+    this.fog = new FogOfWar();
+    this.tablet = new Tablet();
+    this.wheel = new EmoteWheel();
+    this.smoke = new SmokeLayer(renderer.scene);
+    this.decoys = new DecoyLayer(renderer.scene);
+    this.smokeList = [];
+    this.cameraStates = [];
+    this.bubbles = [];      // { sprite, parent, until }
+    input.onTablet = () => this.tablet.toggle();
+    input.onWheel = (down) => this.onWheel(down);
+    input.onGadget = (slot) => this.network.socket.emit('gadget', { slot, yaw: this.camera.yaw });
+    this.onEmoteMsg = (msg) => this.onEmote(msg);
+    network.on('emote', this.onEmoteMsg);
 
     // --- Everyone else (interpolated) ---
     this.others = new Map(); // id -> { model, tag, facing, lastX, lastZ, speed }
@@ -108,6 +130,13 @@ export class GameSession {
 
   dispose() {
     this.network.off('snap', this.onSnap);
+    this.network.off('emote', this.onEmoteMsg);
+    this.input.onTablet = this.input.onWheel = this.input.onGadget = () => {};
+    this.tablet.close();
+    if (this.wheel.active) this.wheel.closeWheel();
+    this.smoke.dispose();
+    this.decoys.dispose();
+    for (const b of this.bubbles) b.parent.remove(b.sprite);
     this.renderer.scene.remove(this.myModel.root);
     for (const other of this.others.values()) this.renderer.scene.remove(other.model.root);
     this.others.clear();
@@ -151,10 +180,14 @@ export class GameSession {
       this.closedKey = key;
       this.colliders = withClosedDoors(COLLIDERS, closed);
       this.visionBlockers = withClosedDoors(VISION_BLOCKERS_STANDING, closed);
+      this.sightBlockers = withClosedDoors(WALLS, closed);
       for (const view of this.guards.values()) view.cone.blockers = this.visionBlockers;
       for (const view of this.cameraViews.values()) view.cone.blockers = this.visionBlockers;
     }
 
+    this.smokeList = snap.smokes ?? [];
+    this.decoys.sync(snap.decoys ?? []);
+    this.cameraStates = snap.cameras ?? [];
     for (const c of snap.cameras ?? []) {
       const view = this.cameraViews.get(c.id);
       view?.update(c, this.isDark(view.def.x, view.def.z) ? 0 : CAMERA.range);
@@ -183,7 +216,11 @@ export class GameSession {
   handleEvent(event) {
     if (event.type === 'spotted') { this.hud.toast('A guard spotted you — RUN!'); this.sounds.beep(980, 0.25); }
     if (event.type === 'camera') this.hud.toast('A security camera sees you!', 2);
-    if (event.type === 'noise') this.ripples.add(event.x, event.z, event.r, event.kind);
+    if (event.type === 'noise') {
+      this.ripples.add(event.x, event.z, event.r, event.kind);
+      this.tablet.addNoise(event.x, event.z, event.r, event.kind);
+    }
+    if (event.type === 'info') this.hud.toast(event.text, 3);
     if (event.type === 'police') this.hud.toast('ALARM 100% — the police are coming! Get out!', 5);
     if (event.type === 'knockedOut') {
       this.hud.toast(event.dropped > 0 ? `Knocked out! You dropped $${event.dropped}.` : 'A guard knocked you out!', 4);
@@ -217,9 +254,10 @@ export class GameSession {
       return;
     }
 
-    // 1) Mouse → camera angles
+    // 1) Mouse → camera angles (or → the chat wheel while it is open)
     const { dx, dy } = this.input.consumeMouse();
-    this.camera.rotate(dx, dy);
+    if (this.wheel.active) this.wheel.move(dx, dy);
+    else this.camera.rotate(dx, dy);
 
     // 2) Fixed-rate input steps (exactly 60 per second, like the server expects)
     this.accumulator += dt;
@@ -278,7 +316,7 @@ export class GameSession {
 
     // 4) Loot and the "E" prompt
     const option = knockedOut ? null : findInteraction(
-      { x: drawX, z: drawZ, items: this.myState.items, hiddenIn: this.myState.hiddenIn, gadgets: this.myState.gadgets, speed: {} },
+      { x: drawX, z: drawZ, items: this.myState.items, hiddenIn: this.myState.hiddenIn, gadgets: this.gadgetTypes(), speed: this.actionSpeeds() },
       this.interactionWorld(),
     );
     const act = this.myState.act;
@@ -289,13 +327,74 @@ export class GameSession {
     // 5) HUD
     this.hud.setTimer(this.timeLeft);
     this.hud.setAlarm(this.alarm, this.police);
+    this.hud.setGadgets(this.myState.gadgets ?? [], GADGETS);
     this.hud.setLoot(this.carriedValue(), this.myState.banked);
+
+    // 6) Gadget effects, speech bubbles, fog of war and the tablet
+    this.smoke.sync(this.smokeList, dt);
+    this.updateBubbles();
+    this.fog.update(dt, drawX, drawZ, this.sightBlockers, { loot: this.lootList, doors: this.doorStates, darkRooms: this.darkRooms });
+    this.drawTablet(drawX, drawZ, sample);
     this.hud.setRoom(roomAt(drawX, drawZ)?.name ?? '—');
     this.hud.setStance(this.me.moveMode, this.me.crouching);
     this.hud.setCenter(knockedOut ? `KNOCKED OUT\n${Math.ceil(this.myState.koLeft)}` : hidden ? 'HIDDEN' : '');
     document.body.classList.toggle('hiding', hidden);
     const chased = sample?.newer.guards?.some((g) => g.me && g.s === 'chase');
     this.hud.setDanger(!!chased);
+  }
+
+  gadgetTypes() {
+    return (this.myState.gadgets ?? []).map((g) => g.type);
+  }
+
+  /** Same speed bonuses as the server (Thief.actionSpeeds). */
+  actionSpeeds() {
+    return this.gadgetTypes().includes('lockpick') ? { pick: 2.5, crack: 1.5 } : {};
+  }
+
+  drawTablet(x, z, sample) {
+    if (!this.tablet.open) return;
+    const guards = sample?.newer.guards ?? [];
+    const others = sample?.newer.players ?? [];
+    this.tablet.draw({
+      me: { x, z, facing: this.camera.yaw }, fog: this.fog, guards, others,
+      cameras: this.cameraStates, roster: this.roster, gadgetTypes: this.gadgetTypes(),
+    });
+  }
+
+  // ------------------------------------------------------------------ chat wheel
+  onWheel(down) {
+    if (down) {
+      this.wheel.openWheel();
+    } else if (this.wheel.active) {
+      const id = this.wheel.closeWheel();
+      if (id) this.network.socket.emit('emote', { id });
+    }
+  }
+
+  /** Someone sent a chat-wheel message. */
+  onEmote({ from, id }) {
+    const emote = EMOTES.find((e) => e.id === id);
+    const info = this.roster.get(from);
+    if (!emote || !info) return;
+    this.hud.feed(`${info.name}: ${emote.text}`, info.color);
+    // Speech bubble above the sender, if we can see them.
+    const parent = from === this.myId ? this.myModel.root : this.others.get(from)?.model.root;
+    if (!parent) return;
+    for (const b of this.bubbles.filter((bb) => bb.parent === parent)) b.until = 0;
+    const sprite = createBubble(emote.text);
+    sprite.position.y = 2.55;
+    parent.add(sprite);
+    this.bubbles.push({ sprite, parent, until: performance.now() + 3500 });
+  }
+
+  updateBubbles() {
+    const now = performance.now();
+    this.bubbles = this.bubbles.filter((b) => {
+      if (b.until > now) return true;
+      b.parent.remove(b.sprite);
+      return false;
+    });
   }
 
   /** Everything findInteraction() needs, built from the latest snapshot. */
@@ -346,6 +445,9 @@ export class GameSession {
     }
     this.loot.sync(this.lootList, null);
     this.animateWorld(dt);
+    this.smoke.sync(this.smokeList, dt);
+    this.updateBubbles();
+    this.tablet.close();
     this.ripples.update(dt);
     this.hud.setAlarm(this.alarm, this.police);
     this.hud.setPrompt(null);
@@ -358,6 +460,9 @@ export class GameSession {
 
   updateGuards(dt, { older, newer, alpha }) {
     const olderById = new Map((older.guards ?? []).map((g) => [g.id, g]));
+    // Guards you can't see aren't in the snapshot (fog of war): hide them.
+    const shown = new Set((newer.guards ?? []).map((g) => g.id));
+    for (const [id, view] of this.guards) view.setVisible(shown.has(id));
     for (const g of newer.guards ?? []) {
       let view = this.guards.get(g.id);
       if (!view) {

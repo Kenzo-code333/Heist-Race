@@ -23,12 +23,16 @@ export class Input {
     this.locked = false;
     this.onLockChange = () => {}; // callback set by main.js
     this.onInteract = () => {};   // called with true (E pressed) / false (E released)
+    this.onTablet = () => {};     // Tab pressed
+    this.onWheel = () => {};      // Q pressed (true) / released (false)
+    this.onGadget = () => {};     // 1 or 2 pressed (slot 0 or 1)
     this.interactDown = false;
 
     window.addEventListener('keydown', (e) => this.onKeyDown(e));
     window.addEventListener('keyup', (e) => {
       this.keys.delete(e.code);
       if (e.code === 'KeyE') this.setInteract(false);
+      if (e.code === 'KeyQ' && this.wheelDown) { this.wheelDown = false; this.onWheel(false); }
     });
     window.addEventListener('blur', () => { this.keys.clear(); this.setInteract(false); }); // tab switched: release everything
     document.addEventListener('mousemove', (e) => {
@@ -49,10 +53,12 @@ export class Input {
   }
 
   onKeyDown(e) {
-    // Tab normally moves focus between page elements; reserve it for the
-    // blueprint tablet (Milestone 7).
+    // Tab normally moves focus between page elements; here it opens the tablet.
     if (e.code === 'Tab') e.preventDefault();
     if (!this.locked) return;
+    if (e.code === 'Tab' && !e.repeat) this.onTablet();
+    if (e.code === 'KeyQ' && !e.repeat) { this.wheelDown = true; this.onWheel(true); }
+    if ((e.code === 'Digit1' || e.code === 'Digit2') && !e.repeat) this.onGadget(e.code === 'Digit1' ? 0 : 1);
     if (e.code === 'KeyC' && !e.repeat) this.crouchToggled = !this.crouchToggled;
     if (e.code === 'KeyE' && !e.repeat) this.setInteract(true);
     this.keys.add(e.code);

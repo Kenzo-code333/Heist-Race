@@ -40,6 +40,9 @@
         <div id="hud-stance-hint">Noise level</div>
       </div>
       <div id="hud-crosshair"></div>
+      <div id="hud-gadgets"></div>
+      <div id="hud-feed"></div>
+      <div id="hud-hints">TAB blueprint · Q chat wheel · 1 / 2 gadgets</div>
       <div id="hud-center"></div>
       <div id="hud-toast"></div>
     </div>
@@ -89,11 +92,34 @@
           <tr><td>C</td><td>Toggle crouch-sneak — silent (walking is quiet, running is loud)</td></tr>
           <tr><td>E (hold)</td><td>Grab loot, crack safes, drill the vault, pick locks, cut lights, escape</td></tr>
           <tr><td>E (tap)</td><td>Open / close doors, hide in closets</td></tr>
+          <tr><td>1 / 2</td><td>Use gadget</td></tr>
+          <tr><td>Tab</td><td>Blueprint tablet (keep moving while it's open)</td></tr>
+          <tr><td>Q (hold)</td><td>Chat wheel (A on AZERTY): point with the mouse, release</td></tr>
           <tr><td>Esc</td><td>Release the mouse</td></tr>
         </table>
       </div>
 
-      <!-- 4) Scoreboard at the end of a match -->
+      <!-- 4) Planning: secret choice of entry point and gadgets -->
+      <div class="overlay-card screen hidden wide" id="screen-planning">
+        <div class="plan-header">
+          <h1>PLAN THE HEIST</h1>
+          <div id="plan-timer">60</div>
+        </div>
+        <p class="subtitle">Your choices are secret. Rivals only see that you are ready.</p>
+        <div class="plan-body">
+          <canvas id="plan-map" width="600" height="420"></canvas>
+          <div class="plan-side">
+            <div class="plan-title">ENTRY POINT</div>
+            <div id="plan-entries"></div>
+            <div class="plan-title">GADGETS <span id="plan-gadget-count">(pick 2)</span></div>
+            <div id="plan-gadgets"></div>
+            <button id="plan-ready" class="primary">I'm ready</button>
+            <p id="plan-status" class="subtitle"></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5) Scoreboard at the end of a match -->
       <div class="overlay-card screen hidden" id="screen-scoreboard">
         <h1>HEIST OVER</h1>
         <p class="subtitle" id="score-winner"></p>
@@ -102,6 +128,17 @@
         <p id="score-wait" class="subtitle">Waiting for the host…</p>
       </div>
     </div>
+
+    <!-- Blueprint tablet (Tab). Doesn't capture the mouse: you keep moving. -->
+    <div id="tablet" class="hidden">
+      <div class="tablet-frame">
+        <div class="tablet-head">BLUEPRINT · <span>explored</span> <span class="dim">remembered</span> <span class="dark">unknown</span></div>
+        <canvas id="tablet-map" width="900" height="600"></canvas>
+      </div>
+    </div>
+
+    <!-- Emote / chat wheel (hold Q, move the mouse, release) -->
+    <div id="wheel" class="hidden"></div>
 
     <script type="module" src="/src/main.js"></script>
   </body>

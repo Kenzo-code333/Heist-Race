@@ -19,6 +19,7 @@ export class Screens {
       lobby: $('screen-lobby'),
       pause: $('screen-pause'),
       scoreboard: $('screen-scoreboard'),
+      planning: $('screen-planning'),
     };
 
     // Remember the name between visits (browser storage; may be unavailable).

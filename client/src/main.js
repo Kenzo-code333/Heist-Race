@@ -17,6 +17,7 @@ import { Input } from './input/Input.js';
 import { Hud } from './ui/Hud.js';
 import { Screens } from './ui/Screens.js';
 import { Network } from './net/Network.js';
+import { Planning } from './ui/Planning.js';
 
 const hud = new Hud();
 const renderer = new Renderer(document.getElementById('game'));
@@ -26,6 +27,8 @@ const input = new Input(renderer.renderer.domElement);
 let level = null;        // handles from buildLevel(): camera blockers, doors, props, lights
 let session = null;      // the current GameSession, or null outside a match
 let roomState = null;    // latest lobby info from the server
+
+const planning = new Planning(network);
 
 // ---------------------------------------------------------------- UI actions
 const screens = new Screens({
@@ -81,6 +84,12 @@ network.on('room:state', (state) => {
   screens.setScoreboardHost(state.hostId === network.id);
   // The host sent everyone back from the scoreboard to the lobby.
   if (state.phase === 'lobby' && screens.current === 'scoreboard') screens.show('lobby');
+  if (state.phase === 'planning' && !session) screens.show('planning');
+});
+
+network.on('plan:state', (state) => {
+  planning.update(state);
+  if (screens.current !== 'planning' && !session) screens.show('planning');
 });
 
 network.on('match:end', ({ results, reason }) => {

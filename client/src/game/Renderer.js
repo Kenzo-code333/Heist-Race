@@ -76,6 +76,21 @@ export class Renderer {
       this.aoPass = new GTAOPass(this.scene, this.camera, window.innerWidth, window.innerHeight);
       this.aoPass.updateGtaoMaterial({ radius: 0.5, distanceExponent: 1.5, thickness: 1.0, scale: 1.0, samples: 12 });
       this.aoPass.blendIntensity = 0.85;
+      // The AO pass treats everything as solid. Hide see-through things while it
+      // works (smoke, glass, vision cones, labels), or they'd cast dark squares.
+      const aoPass = this.aoPass;
+      const originalOverride = aoPass._overrideVisibility.bind(aoPass);
+      aoPass._overrideVisibility = () => {
+        originalOverride();
+        aoPass.scene.traverse((object) => {
+          const m = object.material;
+          const seeThrough = object.isSprite || (m && !Array.isArray(m) && m.transparent && m.depthWrite === false);
+          if (seeThrough && object.visible) {
+            object.visible = false;
+            aoPass._visibilityCache.push(object);
+          }
+        });
+      };
       this.composer.addPass(this.aoPass);
     }
     if (GRAPHICS.bloom) {

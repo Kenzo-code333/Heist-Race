@@ -10,14 +10,16 @@ ambiguous pick the simplest option and say so.
 
 ## Current milestone
 
-**Milestone 6 — DONE:** real doors in every interior doorway (tap E open/close, hold
-to lock, 3 start locked → hold 4 s to pick; guards have keys and re-lock behind them;
-closed doors block movement, sight and muffle noise), 2 safes (7 s crack, progress
-saved for anyone), 5 gallery paintings (heavy: no running, weight 3 = max), vault
-(3 loud 8 s drilling stages → 4 gold bars, weight 1 each), 4 closets to hide in
-(invisible to guards, cameras and players), light switches per room (dark room:
-guards see 4 m, cameras blind; a guard comes to fix it after 20 s). Knockouts drop all
-bulky loot.
+**All 7 milestones DONE.** Milestone 7 added: 60 s secret planning phase (entry point
++ 2 gadgets; only the ready count is shared), 4 entry points / exits (main entrance,
+loading dock, office window, gallery skylight — needs the grappling hook), gadgets
+(smoke bomb, decoy noise, camera jammer = active on keys 1/2, single use; lockpick kit,
+grappling hook = passive), blueprint tablet (Tab) with personal fog of war (unknown /
+remembered / live) and noise ripples, chat wheel (hold Q) with speech bubbles + feed,
+server-side fog of war (rival thieves and guards are only sent when in line of sight),
+a second guard, 4 s spawn immunity.
+
+Next steps: playtesting feedback, balance tuning (constants.js), performance tuning.
 
 | # | Milestone | Status |
 |---|-----------|--------|
@@ -27,7 +29,7 @@ bulky loot.
 | 4 | Cash loot, exit, scoring, scoreboard (MVP) | ✅ |
 | 5 | Noise, alarm meter, police escape timer | ✅ |
 | 6 | Locks, safes, paintings, vault, hiding, sabotage | ✅ |
-| 7 | Planning phase, gadgets, blueprint tablet + fog of war, emote wheel | ⏳ |
+| 7 | Planning phase, gadgets, blueprint tablet + fog of war, emote wheel | ✅ |
 
 ## Stack
 
@@ -68,8 +70,10 @@ shared/                 used by BOTH sides
 server/
   index.js              Express + Socket.io event wiring (+ /health)
   RoomManager.js        rooms by 4-letter code, one shared tick loop (TICK_RATE)
-  Room.js               lobby → playing phases, host, roster, sends per-player snapshots
-  Match.js              the authoritative heist simulation for one room
+  Room.js               lobby → planning → playing → ended, host, roster, secret plans, emotes,
+                        sends per-player snapshots
+  Match.js              the authoritative heist simulation: thieves, guards, cameras, noise, alarm,
+                        police, doors, loot, safes, vault, closets, lights, gadgets, fog-of-war filtering
   entities/Thief.js     server-side thief: validated input queue, rate-limited replay, knockout
   entities/Guard.js     guard state machine: patrol → suspicious → chase → search → return (+ investigate)
   entities/SecurityCamera.js sweeping camera: sees thieves → alarm + calls nearest guard
@@ -92,6 +96,8 @@ client/
     CameraView.js       security camera model + red cone
     NoiseRipples.js     expanding floor rings for heard noises
     Sounds.js           Web Audio siren + beeps (no audio files)
+    FogOfWar.js         personal explored/visible grid + memories (loot, doors, cameras, dark rooms)
+    Effects.js          smoke clouds, decoy devices, speech bubbles
     ThirdPersonCamera.js yaw/pitch orbit camera, shoulder offset, ray-vs-Box3 wall avoidance
     GameSession.js      one match on the client: prediction/reconciliation (own thief), interpolation (others)
     SnapshotBuffer.js   snapshot history + sampling at now - INTERPOLATION_DELAY
@@ -99,17 +105,24 @@ client/
     LootLayer.js        loot models synced with the snapshot + highlight ring
   src/input/Input.js    keyboard (event.code → AZERTY-safe) + pointer-lock mouse
   src/ui/Hud.js         room name, stance/noise bars, server status
-  src/ui/Screens.js     menu / lobby / pause / scoreboard panels
+  src/ui/Screens.js     menu / lobby / pause / scoreboard panels (+ planning panel element)
+  src/ui/Planning.js    planning screen: blueprint with partial info, entry + gadget picks, ready
+  src/ui/Blueprint.js   BlueprintPainter: 2D map drawing on a canvas (planning + tablet)
+  src/ui/Tablet.js      in-game blueprint tablet (fog, memories, live entities, noise rings)
+  src/ui/EmoteWheel.js  hold-Q chat wheel
   src/net/Network.js    Socket.io client wrapper (requests with acks as Promises)
 
 ### Network protocol (Socket.io events)
 
 - client → server: `room:create {name}` (ack), `room:join {code,name}` (ack), `room:leave`,
-  `room:start` (host only), `room:lobby` (host, from scoreboard), `interact {down}`,
+  `room:start` (host only → planning), `room:lobby` (host, from scoreboard), `interact {down}`,
+  `plan:choose {entry, gadgets}`, `plan:ready`, `gadget {slot, yaw}`, `emote {id}`,
   `inputs [{seq, forward, back, left, right, run, crouch, yaw}]`
 - server → client: `room:state {code, hostId, phase, players}`, `match:start {roster}`,
   `snap {t, timeLeft, you:{...,seq,koLeft,cash,items,banked,escaped,act}, players, guards, loot, events?}`
-  (20 Hz, personal per player), `match:end {results}`
+  + doors, safes, vault, closets, dark, cameras, alarm, police, smokes, decoys
+  (20 Hz, personal per player, rivals/guards filtered by line of sight), `match:end {results, reason}`,
+  `plan:state {timeLeft, you, readyCount, total}` (personal), `emote {from, id}`
 - Every input = exactly 1/60 s of movement; the server replays at most ~real-time worth per tick.
 ```
 
@@ -120,7 +133,10 @@ client/
 - Obstacles are axis-aligned rectangles only (`face` ∈ n/s/e/w); props are built facing +z and rotated.
 - All geometry UVs are in metres; each material's texture `repeat` = 1 / tile size in metres.
 - Only the first ceiling light per room casts shadows (performance).
-- Controls: WASD move, Shift run, C toggle crouch-sneak. (Planned: E interact, Tab tablet.)
+- Controls: WASD move, Shift run, C toggle crouch-sneak, E interact (tap / hold), 1/2 gadgets,
+  Tab tablet, Q chat wheel. Keys use `event.code` (physical position → AZERTY works).
+- Gameplay numbers (speeds, noise radii, alarm amounts, timers, gadget stats) live in
+  `shared/constants.js`; building content (rooms, loot, guards, cameras...) in `shared/map.js`.
 
 ## JavaScript for Python developers (cheat sheet)
 

@@ -56,6 +56,7 @@ export class Guard {
     if (!thief.isTargetable(match.time)) return false;
     const range = match.visionRangeAt(thief.x, thief.z);
     if (!inViewCone(this.x, this.z, this.facing, thief.x, thief.z, range, GUARD.visionHalfAngle)) return false;
+    if (match.smokeBlocks(this.x, this.z, thief.x, thief.z)) return false;
     return hasLineOfSight(this.x, this.z, thief.x, thief.z, match.visionBlockersFor(thief.crouching));
   }
 

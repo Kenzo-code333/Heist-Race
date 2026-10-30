@@ -490,11 +490,33 @@ function depositBoxes({ w, d, h }) {
   return g;
 }
 
-/** Closed glass double doors at the main entrance, plus a hint of night street outside. */
-function entranceDoors({ w, h }) {
+/**
+ * Closed exterior openings, plus a hint of the night street outside:
+ *   style 'glass'   : glass double doors (main entrance)
+ *   style 'shutter' : corrugated roll-up shutter (loading dock)
+ *   style 'window'  : tall window with mullions (office)
+ */
+function entranceDoors({ w, h, style = 'glass' }) {
   const g = new THREE.Group();
   const leafW = w / 2;
-  for (const side of [-1, 1]) {
+  if (style === 'shutter') {
+    for (let y = 0.05; y < h; y += 0.1) boxMesh(w, 0.085, 0.04, 'paintedMetal', [0, y, 0], g);
+    boxMesh(w + 0.1, 0.25, 0.25, 'darkSteel', [0, h - 0.05, -0.05], g); // roller housing
+    const stripe = new THREE.MeshStandardMaterial({ color: 0xe8b830, roughness: 0.6 });
+    boxMesh(w, 0.08, 0.045, stripe, [0, 0.05, 0.005], g);
+    boxMesh(0.25, 0.04, 0.05, 'chrome', [0, 0.9, 0.03], g); // handle
+  }
+  if (style === 'window') {
+    const glass = boxMesh(w - 0.06, h - 0.06, 0.02, 'glass', [0, h / 2, 0], g);
+    glass.castShadow = false;
+    glass.renderOrder = 2;
+    boxMesh(w, 0.06, 0.08, 'whitePaint', [0, 0.03, 0], g);
+    boxMesh(w, 0.06, 0.08, 'whitePaint', [0, h - 0.03, 0], g);
+    for (const e of [-1, 0, 1]) boxMesh(0.04, h, 0.06, 'whitePaint', [e * (w / 2 - 0.02), h / 2, 0], g);
+    boxMesh(w, 0.04, 0.06, 'whitePaint', [0, h * 0.6, 0], g);
+    boxMesh(w + 0.1, 0.04, 0.22, 'whitePaint', [0, 0.85, 0.08], g); // sill
+  }
+  for (const side of (style === 'glass' ? [-1, 1] : [])) {
     const cx = side * leafW / 2;
     const glass = boxMesh(leafW - 0.08, h - 0.1, 0.02, 'glass', [cx, h / 2, 0], g);
     glass.castShadow = false;
@@ -584,6 +606,28 @@ function lightSwitch() {
   return g;
 }
 
+/** A skylight in the ceiling with a climbing rope hanging from it. */
+function skylight() {
+  const g = new THREE.Group();
+  const top = 2.99;
+  // Moonlit sky seen through the opening (glows a little)
+  const sky = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.2), new THREE.MeshBasicMaterial({ color: 0x2a3f6e, toneMapped: false }));
+  sky.rotation.x = Math.PI / 2;
+  sky.position.y = top;
+  g.add(sky);
+  for (const [x, z, w, d] of [[0, -0.62, 1.3, 0.06], [0, 0.62, 1.3, 0.06], [-0.62, 0, 0.06, 1.3], [0.62, 0, 0.06, 1.3]]) {
+    boxMesh(w, 0.08, d, 'darkSteel', [x, top - 0.04, z], g);
+  }
+  const rope = new THREE.MeshStandardMaterial({ color: 0xc8b68a, roughness: 0.95 });
+  cylinderMesh(0.018, 0.018, top - 0.25, rope, [0.25, (top + 0.25) / 2, 0.1], g, 8);
+  mesh(new THREE.SphereGeometry(0.045, 10, 8), rope, [0.25, 0.28, 0.1], g); // knot
+  const moon = new THREE.SpotLight(0x8fa8ff, 6, 6, 0.5, 0.8, 1.5); // faint moonlight beam
+  moon.position.set(0, top, 0);
+  moon.target.position.set(0, 0, 0);
+  g.add(moon, moon.target);
+  return g;
+}
+
 // ===========================================================================
 // WALL DECORATIONS (back at z = 0, origin at the item's centre height)
 // ===========================================================================
@@ -669,7 +713,7 @@ function rugProp({ w, d, style }) {
 // ---------------------------------------------------------------------------
 export const PROP_BUILDERS = {
   desk, cabinet, bookshelf, plant, displayCase, bench, receptionDesk, sofa,
-  coffeeTable, shelf, crate, vaultDoor, depositBoxes, entranceDoors, safe, closet, lightSwitch,
+  coffeeTable, shelf, crate, vaultDoor, depositBoxes, entranceDoors, safe, closet, lightSwitch, skylight,
   painting, exitSign, extinguisher, securityCamera, rug: rugProp,
 };
 

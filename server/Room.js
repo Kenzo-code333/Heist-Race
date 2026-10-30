@@ -3,8 +3,9 @@
 // ----------------------------------------------------------------------------
 // One room = a group of players sharing a code. A room goes through phases:
 //
-//   'lobby'   → players gather, the host presses Start
-//   'playing' → a Match (the actual heist simulation) is running
+//   'lobby'    → players gather, the host presses Start
+//   'planning' → 60 s: each player SECRETLY picks an entry point + 2 gadgets
+//   'playing'  → a Match (the actual heist simulation) is running
 //   'ended'   → everyone sees the scoreboard; the host can go back to the lobby
 //
 // The room relays messages between the sockets and its Match, and sends each
@@ -12,7 +13,8 @@
 // ============================================================================
 
 import { Match } from './Match.js';
-import { MAX_PLAYERS, MAX_NAME_LENGTH, PLAYER_COLORS } from '../shared/constants.js';
+import { MAX_PLAYERS, MAX_NAME_LENGTH, PLAYER_COLORS, PLANNING_TIME, GADGETS, GADGET_SLOTS, EMOTES } from '../shared/constants.js';
+import { ENTRY_POINTS } from '../shared/map.js';
 
 export class Room {
   constructor(code, io, onEmpty) {
@@ -23,6 +25,8 @@ export class Room {
     this.hostId = null;
     this.phase = 'lobby';
     this.match = null;
+    this.planning = null; // { timeLeft, choices: Map(id -> { entry, gadgets, ready }) }
+    this.lastEmote = new Map(); // id -> time of last emote (anti-spam)
   }
 
   /** Try to add a player. Returns { ok, error? } for the client. */
@@ -48,6 +52,7 @@ export class Room {
     player.socket.leave(this.code);
     this.players.delete(id);
     this.match?.removeThief(id);
+    this.planning?.choices.delete(id);
 
     if (this.players.size === 0) {
       this.onEmpty();
@@ -58,13 +63,73 @@ export class Room {
     this.broadcastRoomState();
   }
 
-  /** Host pressed Start. */
+  /** Host pressed Start: begin the planning phase. */
   start(byId) {
     if (byId !== this.hostId || this.phase !== 'lobby') return;
+    this.phase = 'planning';
+    const choices = new Map();
+    for (const id of this.players.keys()) choices.set(id, { entry: 'main', gadgets: ['smoke', 'lockpick'], ready: false });
+    this.planning = { timeLeft: PLANNING_TIME, choices, lastSent: -1 };
+    this.broadcastRoomState();
+    this.sendPlanningState();
+  }
+
+  /** A player changed their plan. Everything is validated (never trust the client). */
+  choosePlan(id, msg) {
+    const choice = this.planning?.choices.get(id);
+    if (!choice || choice.ready) return;
+    const gadgets = Array.isArray(msg?.gadgets)
+      ? [...new Set(msg.gadgets.filter((g) => typeof g === 'string' && GADGETS[g]))].slice(0, GADGET_SLOTS)
+      : choice.gadgets;
+    const entry = ENTRY_POINTS.find((e) => e.id === msg?.entry) ? msg.entry : choice.entry;
+    choice.gadgets = gadgets;
+    // The skylight needs the grappling hook.
+    const entryDef = ENTRY_POINTS.find((e) => e.id === entry);
+    choice.entry = entryDef.requires && !gadgets.includes(entryDef.requires) ? 'main' : entry;
+    this.sendPlanningState();
+  }
+
+  setReady(id) {
+    const choice = this.planning?.choices.get(id);
+    if (!choice) return;
+    choice.ready = true;
+    this.sendPlanningState();
+    if ([...this.planning.choices.values()].every((c) => c.ready)) this.beginHeist();
+  }
+
+  /** Each player only learns their OWN choices (+ how many are ready). */
+  sendPlanningState() {
+    if (!this.planning) return;
+    const choices = [...this.planning.choices.values()];
+    const readyCount = choices.filter((c) => c.ready).length;
+    for (const [id, choice] of this.planning.choices) {
+      this.players.get(id)?.socket.emit('plan:state', {
+        timeLeft: Math.ceil(this.planning.timeLeft), you: choice, readyCount, total: choices.length,
+      });
+    }
+  }
+
+  beginHeist() {
+    const plans = this.planning.choices;
+    this.planning = null;
     this.phase = 'playing';
-    this.match = new Match([...this.players.values()], (results, reason) => this.endMatch(results, reason));
+    const players = [...this.players.values()].map((p) => ({ ...p, plan: plans.get(p.id) ?? { entry: 'main', gadgets: [] } }));
+    this.match = new Match(players, (results, reason) => this.endMatch(results, reason));
     this.io.to(this.code).emit('match:start', { roster: this.roster() });
     this.broadcastRoomState();
+  }
+
+  handleGadget(id, msg) {
+    if (this.phase === 'playing') this.match.useGadget(id, msg);
+  }
+
+  /** Chat-wheel message: everyone sees it in the feed; the bubble shows only where the sender is visible. */
+  handleEmote(id, msg) {
+    if (this.phase !== 'playing' || !EMOTES.find((e) => e.id === msg?.id)) return;
+    const now = Date.now();
+    if (now - (this.lastEmote.get(id) ?? 0) < 1000) return; // max one per second
+    this.lastEmote.set(id, now);
+    this.io.to(this.code).emit('emote', { from: id, id: msg.id });
   }
 
   handleInput(id, input) {
@@ -108,6 +173,17 @@ export class Room {
 
   /** Called by the RoomManager every tick. */
   tick(dt) {
+    if (this.phase === 'planning') {
+      this.planning.timeLeft -= dt;
+      if (this.planning.timeLeft <= 0) return this.beginHeist();
+      // Refresh everyone's countdown once per second.
+      const second = Math.ceil(this.planning.timeLeft);
+      if (second !== this.planning.lastSent) {
+        this.planning.lastSent = second;
+        this.sendPlanningState();
+      }
+      return;
+    }
     if (this.phase !== 'playing') return;
     this.match.tick(dt);
     if (this.phase !== 'playing') return; // the match just ended during this tick

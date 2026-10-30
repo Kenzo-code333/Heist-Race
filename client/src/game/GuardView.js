@@ -96,6 +96,13 @@ export class GuardView {
     }
   }
 
+  /** Hide/show everything (guards out of your sight aren't sent by the server). */
+  setVisible(visible) {
+    this.model.root.visible = visible;
+    this.cone.mesh.visible = visible;
+    if (!visible) this.lastX = null;
+  }
+
   dispose() {
     this.scene.remove(this.model.root);
     this.scene.remove(this.cone.mesh);

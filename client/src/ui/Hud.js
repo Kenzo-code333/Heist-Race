@@ -35,6 +35,8 @@ export class Hud {
     this.promptEl = document.getElementById('hud-prompt');
     this.promptLabel = document.getElementById('hud-prompt-label');
     this.progressFill = document.getElementById('hud-progress-fill');
+    this.gadgetsEl = document.getElementById('hud-gadgets');
+    this.feedEl = document.getElementById('hud-feed');
     this.last = {}; // only touch the page when something changed (cheaper)
   }
 
@@ -125,6 +127,35 @@ export class Hud {
       this.promptLabel.textContent = label;
     }
     this.progressFill.style.width = `${Math.round((progress ?? 0) * 100)}%`;
+  }
+
+  /** Gadget slots: [{ type, used }] with names from GADGETS. */
+  setGadgets(gadgets, catalogue) {
+    const key = JSON.stringify(gadgets);
+    if (this.last.gadgets === key) return;
+    this.last.gadgets = key;
+    this.gadgetsEl.innerHTML = '';
+    gadgets.forEach((g, i) => {
+      const info = catalogue[g.type];
+      const el = document.createElement('div');
+      el.className = `gadget${g.used ? ' used' : ''}${info.active ? '' : ' passive'}`;
+      const keyEl = document.createElement('span');
+      keyEl.className = 'key';
+      keyEl.textContent = info.active ? `${i + 1}` : '•';
+      el.append(keyEl, document.createTextNode(info.active ? info.name : `${info.name} (passive)`));
+      this.gadgetsEl.appendChild(el);
+    });
+  }
+
+  /** A line in the chat feed (fades out after a few seconds). */
+  feed(text, color = null) {
+    const line = document.createElement('div');
+    line.className = 'feed-line';
+    if (color !== null) line.style.borderLeft = `3px solid #${color.toString(16).padStart(6, '0')}`;
+    line.textContent = text;
+    this.feedEl.appendChild(line);
+    while (this.feedEl.children.length > 5) this.feedEl.firstChild.remove();
+    setTimeout(() => line.remove(), 6000);
   }
 
   /** Red pulsing screen edges while a guard is chasing you. */

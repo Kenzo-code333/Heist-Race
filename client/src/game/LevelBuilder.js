@@ -291,7 +291,7 @@ function buildObstacles(level, cameraBlockers) {
     // Map sizes are in world axes. If the object is turned sideways (faces
     // east/west), its own width is the world depth and vice versa.
     const sideways = o.face === 'e' || o.face === 'w';
-    const params = { w: sideways ? o.d : o.w, d: sideways ? o.w : o.d, h: o.h, seed: index + 1 };
+    const params = { w: sideways ? o.d : o.w, d: sideways ? o.w : o.d, h: o.h, seed: index + 1, style: o.style };
     const prop = buildProp(o.type, params);
     placeOnPlan(prop, o.x, 0, o.z, o.face);
     level.add(prop);

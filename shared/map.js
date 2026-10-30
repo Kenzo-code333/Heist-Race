@@ -83,8 +83,8 @@ export const ROOMS = [
 const WALL_LINES = [
   // Exterior walls
   { axis: 'x', at: 0,  from: 0, to: 30, doors: [] },   // north
-  { axis: 'x', at: 20, from: 0, to: 30, doors: [{ at: 6, width: 2.2 }] }, // south: main entrance (glass doors, closed for now)
-  { axis: 'z', at: 0,  from: 0, to: 20, doors: [] },   // west
+  { axis: 'x', at: 20, from: 0, to: 30, doors: [{ at: 6, width: 2.2 }, { at: 17.6, width: 1.8 }] }, // south: main entrance + loading dock
+  { axis: 'z', at: 0,  from: 0, to: 20, doors: [{ at: 3.5, width: 1.2 }] },   // west: office window
   { axis: 'z', at: 30, from: 0, to: 20, doors: [] },   // east
   // Interior walls
   { axis: 'x', at: 8,  from: 0, to: 30, doors: [6, 21] },        // office/gallery | corridor
@@ -136,10 +136,12 @@ export const OBSTACLES = [
 
   // --- Storage ---
   { type: 'shelf', x: 18.55, z: 16.0, w: 0.6, d: 3.0, h: 2.2, face: 'w' },
-  { type: 'shelf', x: 15.6, z: 19.55, w: 3.0, d: 0.6, h: 2.2, face: 'n' },
+  { type: 'shelf', x: 14.4, z: 19.55, w: 3.0, d: 0.6, h: 2.2, face: 'n' },
   { type: 'crate', x: 13.0, z: 13.0, w: 0.9, d: 0.9, h: 0.9, face: 's' },
+  { type: 'entranceDoors', x: 17.6, z: 20, w: 1.8, d: 0.2, h: 2.2, face: 'n', style: 'shutter' }, // loading dock shutter
+  { type: 'entranceDoors', x: 0, z: 3.5, w: 0.2, d: 1.2, h: 2.2, face: 'e', style: 'window' },    // office window
   { type: 'closet', id: 'closetStorage', x: 12.42, z: 17.9, w: 0.6, d: 1.0, h: 2.0, face: 'e' },
-  { type: 'crate', x: 12.85, z: 19.1, w: 1.0, d: 1.0, h: 1.0, face: 'n' },
+  { type: 'crate', x: 12.95, z: 14.45, w: 1.0, d: 1.0, h: 1.0, face: 'n' },
 
   // --- Vault room ---
   { type: 'vaultDoor', id: 'vault', x: 29.55, z: 16.0, w: 0.7, d: 3.4, h: 2.8, face: 'w' },
@@ -164,6 +166,8 @@ export const DECOR = [
   { type: 'extinguisher', x: 20, z: 11.9, y: 0.5, face: 'n' },
   // Lobby rug
   { type: 'rug', x: 9.6, z: 18.4, w: 3.2, d: 2.4 },
+  // Skylight in the gallery ceiling with a rope (grappling-hook entry/exit)
+  { type: 'skylight', x: 18.5, z: 3.8, y: 0 },
   // Long carpet runner down the corridor
   { type: 'rug', x: 15, z: 10, w: 28, d: 1.6, style: 'runner' },
 ];
@@ -225,9 +229,24 @@ export const LIGHT_SWITCHES = [
 // Interior doors that start LOCKED (others start closed but unlocked).
 const LOCKED_DOOR_SPOTS = ['12,4', '12,16', '25,12'];
 
-// EXITS: walk up and hold E to escape with everything you carry.
+// ENTRY POINTS / EXITS: chosen secretly during planning. You start at your
+// entry point, and you can escape through ANY exit (hold E). The skylight
+// needs the grappling hook gadget.
 export const EXITS = [
   { id: 'main', name: 'Main entrance', x: 6, z: 19.3, radius: 1.7 },
+  { id: 'dock', name: 'Loading dock', x: 17.6, z: 19.3, radius: 1.5 },
+  { id: 'window', name: 'Office window', x: 0.6, z: 3.5, radius: 1.3 },
+  { id: 'skylight', name: 'Gallery skylight', x: 18.5, z: 3.8, radius: 1.0, requires: 'grapple' },
+];
+export const ENTRY_POINTS = [
+  { id: 'main', name: 'Main entrance', hint: 'Lobby. Wide open, central.',
+    spawns: [{ x: 6, z: 17.0 }, { x: 7.2, z: 17.0 }, { x: 4.8, z: 17.0 }, { x: 6, z: 16.1 }, { x: 7.2, z: 16.1 }, { x: 4.8, z: 16.1 }] },
+  { id: 'dock', name: 'Loading dock', hint: 'Storage room, next to the vault room.',
+    spawns: [{ x: 17.6, z: 18.6 }, { x: 16.7, z: 18.6 }, { x: 17.6, z: 17.8 }, { x: 16.7, z: 17.8 }, { x: 15.9, z: 18.5 }, { x: 15.9, z: 17.7 }] },
+  { id: 'window', name: 'Office window', hint: 'Quiet office with a safe.',
+    spawns: [{ x: 1.0, z: 3.5 }, { x: 1.0, z: 2.7 }, { x: 1.8, z: 3.5 }, { x: 1.8, z: 2.7 }, { x: 1.0, z: 4.3 }, { x: 1.8, z: 4.3 }] },
+  { id: 'skylight', name: 'Gallery skylight', hint: 'Drop right into the gallery. Needs the grappling hook.', requires: 'grapple',
+    spawns: [{ x: 18.5, z: 3.8 }, { x: 19.2, z: 3.8 }, { x: 18.5, z: 4.4 }, { x: 19.2, z: 4.4 }, { x: 17.8, z: 4.2 }, { x: 18.1, z: 3.3 }] },
 ];
 
 // SECURITY CAMERAS: mounted high in a corner, sweeping left and right.
@@ -248,6 +267,13 @@ export const GUARD_ROUTES = [
     waypoints: [
       { x: 3, z: 10, wait: 2 }, { x: 27, z: 10, wait: 0 }, { x: 25.5, z: 6.2, wait: 2.5 },
       { x: 14.5, z: 6.5, wait: 0 }, { x: 8.5, z: 4.3, wait: 2 }, { x: 6, z: 9.8, wait: 0 },
+    ],
+  },
+  {
+    id: 'g2',
+    waypoints: [
+      { x: 27, z: 14, wait: 2 }, { x: 21.5, z: 18.3, wait: 0 }, { x: 15.5, z: 16, wait: 1.5 },
+      { x: 15.5, z: 10.4, wait: 0 }, { x: 24, z: 10, wait: 1 }, { x: 25, z: 13.5, wait: 0 },
     ],
   },
 ];

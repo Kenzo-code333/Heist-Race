@@ -12,7 +12,7 @@ import { Guard } from './entities/Guard.js';
 import { SecurityCamera } from './entities/SecurityCamera.js';
 import { NavGrid } from './ai/NavGrid.js';
 import {
-  COLLIDERS, WALLS, SPAWN_POINTS, GUARD_ROUTES, LOOT, EXITS, SECURITY_CAMERAS, DOORS, SAFES, VAULT,
+  COLLIDERS, WALLS, ENTRY_POINTS, GUARD_ROUTES, LOOT, EXITS, SECURITY_CAMERAS, DOORS, SAFES, VAULT,
   CLOSET_IDS, LIGHT_SWITCHES, VISION_BLOCKERS_STANDING, VISION_BLOCKERS_CROUCHED,
   withClosedDoors, doorBox, frontOf, roomAt,
 } from '../shared/map.js';
@@ -20,8 +20,9 @@ import {
   GUARD, CAMERA, MATCH_DURATION, KNOCKOUT_DROP_SHARE, NOISE_RADIUS, NOISE_PULSE_INTERVAL, WALL_MUFFLE,
   PLAYER_HEARING_BONUS, ALARM, POLICE_COUNTDOWN, PLAYER_RADIUS, LOOT_WEIGHT, MAX_CARRY_WEIGHT,
   ACTION_NOISE, ALARM_VAULT_STAGE, DARK_VISION_RANGE, LIGHTS_FIX_DELAY,
+  GADGETS, SMOKE, DECOY, JAMMER, SIGHT, SPAWN_IMMUNITY,
 } from '../shared/constants.js';
-import { hasLineOfSight } from '../shared/sight.js';
+import { hasLineOfSight, raycast } from '../shared/sight.js';
 import { findInteraction, carriedWeight } from '../shared/interactions.js';
 import { resolveCircleVsBoxes } from '../shared/collision.js';
 
@@ -35,7 +36,7 @@ const CLOSET_FRONT = new Map(CLOSET_IDS.map((id) => [id, frontOf(id)]));
 
 export class Match {
   /**
-   * @param {Array<{id, name, color}>} players
+   * @param {Array<{id, name, color, plan?: {entry, gadgets}}>} players
    * @param {(results, reason) => void} onEnd - called once when the match is over
    */
   constructor(players, onEnd) {
@@ -43,7 +44,19 @@ export class Match {
     this.onEnd = onEnd;
     this.over = false;
     this.thieves = new Map();
-    players.forEach((p, i) => this.thieves.set(p.id, new Thief(p, SPAWN_POINTS[i % SPAWN_POINTS.length])));
+    // Each thief starts at their secretly chosen entry point.
+    const usedSpawns = new Map(); // entry id -> how many spawned there so far
+    for (const p of players) {
+      const entry = ENTRY_POINTS.find((e) => e.id === p.plan?.entry) ?? ENTRY_POINTS[0];
+      const n = usedSpawns.get(entry.id) ?? 0;
+      usedSpawns.set(entry.id, n + 1);
+      const thief = new Thief(p, entry.spawns[n % entry.spawns.length]);
+      thief.gadgets = (p.plan?.gadgets ?? []).map((type) => ({ type, used: false }));
+      thief.immuneUntil = SPAWN_IMMUNITY;
+      this.thieves.set(p.id, thief);
+    }
+    this.smokes = [];  // active smoke clouds { x, z, until }
+    this.decoys = [];  // thrown decoys waiting to go off { x, z, at }
     this.guards = GUARD_ROUTES.map((route) => new Guard(route, NAV));
     this.cameras = SECURITY_CAMERAS.map((def) => new SecurityCamera(def));
 
@@ -111,6 +124,7 @@ export class Match {
       if (camera.seeing) this.raiseAlarm(ALARM.cameraPerSecond * dt);
     }
     if (this.guards.some((g) => g.state === 'chase')) this.raiseAlarm(ALARM.chasePerSecond * dt);
+    this.updateGadgets();
     this.updateLights();
     this.updatePolice(dt);
     this.checkEnd();
@@ -333,6 +347,81 @@ export class Match {
     }
   }
 
+  // ------------------------------------------------------------- gadgets
+  /** Keys 1 / 2: use the gadget in that slot (active gadgets work once). */
+  useGadget(id, msg) {
+    const thief = this.thieves.get(id);
+    if (!thief?.isActive() || thief.hiddenIn || thief.isKnockedOut(this.time)) return;
+    const gadget = thief.gadgets[msg?.slot];
+    if (!gadget || gadget.used || !GADGETS[gadget.type]?.active) return;
+    const yaw = Number.isFinite(msg?.yaw) ? msg.yaw : thief.facing;
+    gadget.used = true;
+
+    if (gadget.type === 'smoke') {
+      this.smokes.push({ x: thief.x, z: thief.z, until: this.time + SMOKE.duration });
+      this.makeNoise(thief.x, thief.z, 3, thief.id, 'tool');
+      thief.events.push({ type: 'info', text: 'Smoke bomb! Guards and cameras can\'t see through it.' });
+    } else if (gadget.type === 'decoy') {
+      // Thrown forward; stops at the first wall in the way.
+      const dx = -Math.sin(yaw), dz = -Math.cos(yaw);
+      const dist = Math.max(0.5, raycast(thief.x, thief.z, dx, dz, DECOY.distance, this.colliders) - 0.3);
+      this.decoys.push({ x: thief.x + dx * dist, z: thief.z + dz * dist, at: this.time + DECOY.delay });
+      thief.events.push({ type: 'info', text: 'Decoy thrown…' });
+    } else if (gadget.type === 'jammer') {
+      let count = 0;
+      for (const cam of this.cameras) {
+        if (Math.hypot(cam.x - thief.x, cam.z - thief.z) <= JAMMER.radius) {
+          cam.disabledUntil = this.time + JAMMER.duration;
+          count++;
+        }
+      }
+      thief.events.push({ type: 'info', text: count ? `${count} camera(s) jammed for ${JAMMER.duration} s.` : 'No camera in range… jammer wasted.' });
+    }
+  }
+
+  updateGadgets() {
+    this.smokes = this.smokes.filter((s) => s.until > this.time);
+    for (const decoy of this.decoys) {
+      if (decoy.at <= this.time) this.makeNoise(decoy.x, decoy.z, DECOY.radius, null, 'loud');
+    }
+    this.decoys = this.decoys.filter((d) => d.at > this.time);
+  }
+
+  /** Does any smoke cloud cut the line between two points? */
+  smokeBlocks(x1, z1, x2, z2) {
+    for (const s of this.smokes) {
+      // Distance from the cloud centre to the segment
+      const dx = x2 - x1, dz = z2 - z1;
+      const lenSq = dx * dx + dz * dz || 1e-9;
+      const t = Math.max(0, Math.min(1, ((s.x - x1) * dx + (s.z - z1) * dz) / lenSq));
+      if (Math.hypot(x1 + dx * t - s.x, z1 + dz * t - s.z) < SMOKE.radius) return true;
+    }
+    return false;
+  }
+
+  // ------------------------------------------------------------- fog of war
+  /**
+   * May `viewer` be told where `other` is? Only if they could plausibly see
+   * them: close enough, nothing in between, not hidden in the dark or smoke.
+   * This is what stops a modified client from showing every rival.
+   */
+  canPlayerSee(viewer, other) {
+    if (viewer.escaped) return true; // spectators see everything
+    const d = Math.hypot(other.x - viewer.x, other.z - viewer.z);
+    if (d <= SIGHT.closeRange) return true;
+    if (d > (this.isDark(other.x, other.z) ? SIGHT.darkRange : SIGHT.range)) return false;
+    if (this.smokeBlocks(viewer.x, viewer.z, other.x, other.z)) return false;
+    return hasLineOfSight(viewer.x, viewer.z, other.x, other.z, this.visionBlockersFor(other.crouching));
+  }
+
+  /** Guards carry flashlights: visible further, but still not through walls. */
+  canPlayerSeeGuard(viewer, guard) {
+    if (viewer.escaped) return true;
+    const d = Math.hypot(guard.x - viewer.x, guard.z - viewer.z);
+    if (d <= SIGHT.closeRange) return true;
+    return hasLineOfSight(viewer.x, viewer.z, guard.x, guard.z, this.blockersStanding);
+  }
+
   // ------------------------------------------------------------- lights
   /** Turn a room's lights on or off. */
   setLights(roomId, on, byThief = null) {
@@ -503,6 +592,7 @@ export class Match {
     const players = [];
     for (const thief of this.thieves.values()) {
       if (thief.id === id || !thief.isActive() || thief.hiddenIn) continue;
+      if (you && !this.canPlayerSee(you, thief)) continue; // fog of war
       players.push(thief.publicState());
     }
     const snap = {
@@ -510,7 +600,10 @@ export class Match {
       timeLeft: Math.max(0, Math.round(MATCH_DURATION - this.time)),
       you: you?.privateState(),
       players,
-      guards: this.guards.map((g) => g.publicState(id)),
+      // The guard chasing you is always sent: you can hear them coming.
+      guards: this.guards.filter((g) => !you || g.targetId === id || this.canPlayerSeeGuard(you, g)).map((g) => g.publicState(id)),
+      smokes: this.smokes.map((s) => ({ x: s.x, z: s.z, left: Math.round(s.until - this.time) })),
+      decoys: this.decoys.map((d) => ({ x: Math.round(d.x * 10) / 10, z: Math.round(d.z * 10) / 10 })),
       cameras: this.cameras.map((c) => c.publicState(this.time)),
       alarm: Math.floor(this.alarm),
       police: this.policeTimer === null ? null : Math.ceil(this.policeTimer),

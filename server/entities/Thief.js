@@ -40,17 +40,21 @@ export class Thief {
     this.interactHeld = false; // is the player holding E right now?
     this.action = null;        // { kind, targetId, duration, label, progress, startX, startZ }
     this.hiddenIn = null;      // closet id while hiding
-    this.gadgets = [];         // chosen gadgets (Milestone 7)
+    this.gadgets = [];         // chosen in planning: [{ type, used }]
+  }
+
+  hasGadget(type) {
+    return this.gadgets.some((g) => g.type === type);
   }
 
   /** What findInteraction() needs to know about this thief. */
   actorView() {
-    return { x: this.x, z: this.z, items: this.items, hiddenIn: this.hiddenIn, gadgets: this.gadgets, speed: this.actionSpeeds() };
+    return { x: this.x, z: this.z, items: this.items, hiddenIn: this.hiddenIn, gadgets: this.gadgets.map((g) => g.type), speed: this.actionSpeeds() };
   }
 
-  /** Speed multipliers for actions (gadgets make some faster in Milestone 7). */
+  /** Speed multipliers for actions: the lockpick kit makes some faster. */
   actionSpeeds() {
-    return {};
+    return this.hasGadget('lockpick') ? { pick: 2.5, crack: 1.5 } : {};
   }
 
   actionSpeed(kind) {

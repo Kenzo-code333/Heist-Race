@@ -60,6 +60,10 @@ io.on('connection', (socket) => {
   socket.on('room:start', () => room?.start(socket.id));
   socket.on('room:lobby', () => room?.backToLobby(socket.id));
   socket.on('interact', (msg) => room?.handleInteract(socket.id, msg?.down));
+  socket.on('plan:choose', (msg) => room?.choosePlan(socket.id, msg));
+  socket.on('plan:ready', () => room?.setReady(socket.id));
+  socket.on('gadget', (msg) => room?.handleGadget(socket.id, msg));
+  socket.on('emote', (msg) => room?.handleEmote(socket.id, msg));
   socket.on('inputs', (list) => {
     if (!Array.isArray(list)) return;
     for (const input of list.slice(0, 10)) room?.handleInput(socket.id, input);
