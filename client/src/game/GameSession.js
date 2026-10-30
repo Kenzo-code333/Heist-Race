@@ -22,7 +22,8 @@ import * as THREE from 'three';
 import { stepMovement, facingFromDirection } from '../../../shared/movement.js';
 import { COLLIDERS, roomAt } from '../../../shared/map.js';
 import { INPUT_DT, INTERPOLATION_DELAY } from '../../../shared/constants.js';
-import { ThiefModel } from './ThiefModel.js';
+import { CharacterModel } from './CharacterModel.js';
+import { GuardView } from './GuardView.js';
 import { ThirdPersonCamera } from './ThirdPersonCamera.js';
 import { SnapshotBuffer, lerpAngle } from './SnapshotBuffer.js';
 import { createNameTag } from './NameTag.js';
@@ -49,15 +50,19 @@ export class GameSession {
     // --- Our own thief (predicted) ---
     const me = this.roster.get(this.myId);
     this.me = { x: 0, z: 0, prevX: 0, prevZ: 0, moveMode: 'idle', crouching: false, facing: 0, speed: 0 };
-    this.myModel = new ThiefModel(me?.color ?? 0xe8b04a);
+    this.myModel = new CharacterModel({ outfit: 'thief', accentColor: me?.color ?? 0xe8b04a });
     renderer.scene.add(this.myModel.root);
     this.hasSpawned = false;
     this.seq = 0;
     this.pendingInputs = [];
     this.accumulator = 0;
 
+    // Latest official facts about ourselves from the server
+    this.myState = { koLeft: 0, immune: false };
+
     // --- Everyone else (interpolated) ---
     this.others = new Map(); // id -> { model, tag, facing, lastX, lastZ, speed }
+    this.guards = new Map(); // id -> GuardView
     this.buffer = new SnapshotBuffer(INTERPOLATION_DELAY);
 
     this.camera = new ThirdPersonCamera(renderer.camera, cameraBlockers);
@@ -71,6 +76,8 @@ export class GameSession {
     this.renderer.scene.remove(this.myModel.root);
     for (const other of this.others.values()) this.renderer.scene.remove(other.model.root);
     this.others.clear();
+    for (const guard of this.guards.values()) guard.dispose();
+    this.guards.clear();
   }
 
   // ------------------------------------------------------------------ network
@@ -78,6 +85,8 @@ export class GameSession {
     this.buffer.push(snap);
     const you = snap.you;
     if (!you) return;
+    this.myState = you;
+    for (const event of snap.events ?? []) this.handleEvent(event);
 
     if (!this.hasSpawned) {
       // First snapshot: place ourselves and face into the building.
@@ -96,8 +105,20 @@ export class GameSession {
     for (const inp of this.pendingInputs) this.applyLocalInput(inp);
   }
 
+  /** One-off messages from the server. */
+  handleEvent(event) {
+    if (event.type === 'spotted') this.hud.toast('A guard spotted you — RUN!');
+    if (event.type === 'knockedOut') this.hud.toast('A guard knocked you out!', 4);
+  }
+
+  /** Apply the same restrictions the server applies (see Thief.modifyInput). */
+  restrictInput(inp) {
+    if (this.myState.koLeft > 0) return { ...inp, forward: false, back: false, left: false, right: false };
+    return inp;
+  }
+
   applyLocalInput(inp) {
-    const result = stepMovement(this.me, inp, INPUT_DT, COLLIDERS);
+    const result = stepMovement(this.me, this.restrictInput(inp), INPUT_DT, COLLIDERS);
     this.me.x = result.x;
     this.me.z = result.z;
     return result;
@@ -140,21 +161,44 @@ export class GameSession {
 
     this.myModel.root.position.set(drawX, 0, drawZ);
     this.myModel.root.rotation.y = this.me.facing;
-    this.myModel.update(dt, this.me.speed, this.me.crouching);
+    const knockedOut = this.myState.koLeft > 0;
+    this.myModel.update(dt, this.me.speed, this.me.crouching, knockedOut);
     this.camera.update(dt, { x: drawX, z: drawZ }, this.me.crouching);
 
-    // 3) Other players
-    this.updateOthers(dt);
+    // 3) Other players and guards
+    const sample = this.buffer.sample();
+    if (sample) {
+      this.updateOthers(dt, sample);
+      this.updateGuards(dt, sample);
+    }
 
     // 4) HUD
     this.hud.setRoom(roomAt(drawX, drawZ)?.name ?? '—');
     this.hud.setStance(this.me.moveMode, this.me.crouching);
+    this.hud.setCenter(knockedOut ? `KNOCKED OUT\n${Math.ceil(this.myState.koLeft)}` : '');
+    const chased = sample?.newer.guards?.some((g) => g.me && g.s === 'chase');
+    this.hud.setDanger(!!chased);
   }
 
-  updateOthers(dt) {
-    const sample = this.buffer.sample();
-    if (!sample) return;
-    const { older, newer, alpha } = sample;
+  updateGuards(dt, { older, newer, alpha }) {
+    const olderById = new Map((older.guards ?? []).map((g) => [g.id, g]));
+    for (const g of newer.guards ?? []) {
+      let view = this.guards.get(g.id);
+      if (!view) {
+        view = new GuardView(this.renderer.scene);
+        this.guards.set(g.id, view);
+      }
+      const a = olderById.get(g.id) ?? g;
+      view.update({
+        ...g,
+        x: a.x + (g.x - a.x) * alpha,
+        z: a.z + (g.z - a.z) * alpha,
+        f: lerpAngle(a.f, g.f, alpha),
+      }, dt);
+    }
+  }
+
+  updateOthers(dt, { older, newer, alpha }) {
     const olderById = new Map(older.players.map((p) => [p.id, p]));
     const seen = new Set();
 
@@ -171,7 +215,7 @@ export class GameSession {
       other.facing = lerpAngle(a.f, p.f, alpha);
       other.model.root.position.set(x, 0, z);
       other.model.root.rotation.y = other.facing;
-      other.model.update(dt, other.speed, p.c);
+      other.model.update(dt, other.speed, p.c, p.ko);
     }
 
     // Remove players that are no longer in the snapshot (left / not visible)
@@ -185,7 +229,7 @@ export class GameSession {
 
   createOther(id, p) {
     const info = this.roster.get(id) ?? { name: '?', color: 0xffffff };
-    const model = new ThiefModel(info.color);
+    const model = new CharacterModel({ outfit: 'thief', accentColor: info.color });
     const tag = createNameTag(info.name, info.color);
     tag.position.y = 2.15;
     model.root.add(tag);

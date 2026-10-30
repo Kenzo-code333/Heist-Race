@@ -26,7 +26,7 @@
 //   (D = doorway, V = vault door)
 // ============================================================================
 
-import { WALL_THICKNESS, WALL_HEIGHT, DOOR_WIDTH } from './constants.js';
+import { WALL_THICKNESS, WALL_HEIGHT, DOOR_WIDTH, EYE_HEIGHT } from './constants.js';
 
 // ---------------------------------------------------------------------------
 // 1) ROOMS: rectangles used for floor/ceiling materials, lights and labels.
@@ -170,6 +170,19 @@ export const DECOR = [
   { type: 'rug', x: 15, z: 10, w: 28, d: 1.6, style: 'runner' },
 ];
 
+// GUARD PATROL ROUTES: each guard walks between its waypoints in a loop
+// (the server finds the way around walls by itself). `wait` = seconds spent
+// standing and looking around at that point.
+export const GUARD_ROUTES = [
+  {
+    id: 'g1',
+    waypoints: [
+      { x: 3, z: 10, wait: 2 }, { x: 27, z: 10, wait: 0 }, { x: 25.5, z: 6.2, wait: 2.5 },
+      { x: 14.5, z: 6.5, wait: 0 }, { x: 8.5, z: 4.3, wait: 2 }, { x: 6, z: 9.8, wait: 0 },
+    ],
+  },
+];
+
 // Where players appear at the start: one spot per player slot (max 6).
 export const SPAWN_POINTS = [
   { x: 6, z: 18 }, { x: 7.2, z: 18 }, { x: 4.8, z: 18 },
@@ -231,6 +244,14 @@ const obstacleBoxes = OBSTACLES.map((o) => ({
 
 // EVERYTHING the player can bump into. Collision code only needs this list.
 export const COLLIDERS = [...WALLS, ...obstacleBoxes];
+
+// What blocks a guard's VIEW of a thief: walls, plus furniture taller than the
+// thief's eyes. So crouching behind the reception desk hides you, standing doesn't.
+export function visionBlockers(targetCrouching) {
+  return targetCrouching ? VISION_BLOCKERS_CROUCHED : VISION_BLOCKERS_STANDING;
+}
+export const VISION_BLOCKERS_STANDING = [...WALLS, ...obstacleBoxes.filter((b) => b.h >= EYE_HEIGHT.standing)];
+export const VISION_BLOCKERS_CROUCHED = [...WALLS, ...obstacleBoxes.filter((b) => b.h >= EYE_HEIGHT.crouching)];
 
 // Find which room a floor point is in (returns the room object or null).
 export function roomAt(x, z) {

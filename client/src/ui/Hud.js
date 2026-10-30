@@ -22,6 +22,9 @@ export class Hud {
     this.serverDot = document.getElementById('hud-server-dot');
     this.serverText = document.getElementById('hud-server-text');
     this.root = document.getElementById('hud');
+    this.centerEl = document.getElementById('hud-center');
+    this.toastEl = document.getElementById('hud-toast');
+    this.toastTimer = null;
     this.last = {}; // only touch the page when something changed (cheaper)
   }
 
@@ -49,5 +52,28 @@ export class Hud {
 
   setVisible(visible) {
     this.root.classList.toggle('hidden', !visible);
+    if (!visible) this.setDanger(false);
+  }
+
+  /** Big text in the middle of the screen ('' to clear). */
+  setCenter(text) {
+    if (this.last.center === text) return;
+    this.last.center = text;
+    this.centerEl.textContent = text;
+  }
+
+  /** A short message near the top that fades after a few seconds. */
+  toast(text, seconds = 3) {
+    this.toastEl.textContent = text;
+    this.toastEl.classList.add('show');
+    clearTimeout(this.toastTimer);
+    this.toastTimer = setTimeout(() => this.toastEl.classList.remove('show'), seconds * 1000);
+  }
+
+  /** Red pulsing screen edges while a guard is chasing you. */
+  setDanger(on) {
+    if (this.last.danger === on) return;
+    this.last.danger = on;
+    document.body.classList.toggle('danger', on);
   }
 }

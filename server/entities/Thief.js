@@ -7,7 +7,7 @@
 // ============================================================================
 
 import { stepMovement, facingFromDirection } from '../../shared/movement.js';
-import { INPUT_DT } from '../../shared/constants.js';
+import { INPUT_DT, KNOCKOUT_TIME, KNOCKOUT_IMMUNITY } from '../../shared/constants.js';
 
 const MAX_QUEUED_INPUTS = 60;
 
@@ -24,6 +24,24 @@ export class Thief {
     this.lastSeq = -1;       // number of the last input we applied (sent back to the client)
     this.inputQueue = [];
     this.idleTime = 0;
+    this.knockedOutUntil = 0; // match time when the thief wakes up
+    this.immuneUntil = 0;     // guards ignore the thief until this time
+    this.events = [];         // one-off messages for this player (sent with the next snapshot)
+  }
+
+  isKnockedOut(time) {
+    return time < this.knockedOutUntil;
+  }
+
+  /** Can guards (and later cameras) notice this thief? */
+  isTargetable(time) {
+    return time >= this.immuneUntil;
+  }
+
+  knockOut(time) {
+    this.knockedOutUntil = time + KNOCKOUT_TIME;
+    this.immuneUntil = time + KNOCKOUT_TIME + KNOCKOUT_IMMUNITY;
+    this.moveMode = 'idle';
   }
 
   /** Store an input until the next tick. Inputs are validated first. */
@@ -46,7 +64,8 @@ export class Thief {
    * allow about as many inputs as real time has passed, so a cheating client
    * can't move faster by sending more inputs.
    */
-  processInputs(dt, colliders) {
+  processInputs(dt, colliders, time) {
+    this.time = time;
     const allowed = Math.ceil(dt / INPUT_DT) + 2;
     let processed = 0;
     while (this.inputQueue.length > 0 && processed < allowed) {
@@ -59,8 +78,12 @@ export class Thief {
     if (this.idleTime > 0.25) this.moveMode = 'idle';
   }
 
-  /** Hook for later milestones (e.g. can't run while carrying heavy loot). */
+  /**
+   * Adjust an input according to the thief's situation. A knocked-out thief
+   * can't move (the input still counts, so the client stays in sync).
+   */
   modifyInput(input) {
+    if (this.isKnockedOut(this.time)) return { ...input, forward: false, back: false, left: false, right: false };
     return input;
   }
 
@@ -76,12 +99,21 @@ export class Thief {
 
   /** What OTHER players receive about this thief (kept small: sent 20x/s). */
   publicState() {
-    return { id: this.id, x: round(this.x), z: round(this.z), f: round(this.facing), m: this.moveMode, c: this.crouching };
+    return {
+      id: this.id, x: round(this.x), z: round(this.z), f: round(this.facing), m: this.moveMode, c: this.crouching,
+      ko: this.isKnockedOut(this.time ?? 0),
+    };
   }
 
   /** What the owning player receives about themself. */
   privateState() {
-    return { ...this.publicState(), seq: this.lastSeq };
+    const time = this.time ?? 0;
+    return {
+      ...this.publicState(),
+      seq: this.lastSeq,
+      koLeft: Math.max(0, Math.round((this.knockedOutUntil - time) * 10) / 10),
+      immune: time < this.immuneUntil,
+    };
   }
 }
 

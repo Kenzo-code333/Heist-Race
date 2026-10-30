@@ -36,3 +36,19 @@ export const MAX_PLAYERS = 6;
 export const MAX_NAME_LENGTH = 16;
 // One colour per player slot (armband + name tag)
 export const PLAYER_COLORS = [0xe8b04a, 0x4aa8e8, 0xe84a6f, 0x5fd37a, 0xb07ae8, 0xf07c3a];
+
+// --- Guards ------------------------------------------------------------------
+export const GUARD = {
+  radius: 0.32,
+  speed: { patrol: 1.5, chase: 4.4, search: 1.2, return: 1.8, investigate: 2.2 },
+  visionRange: 9,            // metres, in a lit room
+  visionHalfAngle: 0.6,      // radians (≈ 34° each side, 68° cone)
+  instantSpotDistance: 2.2,  // closer than this and in the cone = spotted at once
+  catchDistance: 0.85,       // close enough to grab a thief
+  searchTime: 4,             // seconds spent looking around a lost thief's last position
+};
+
+// --- Thieves getting caught ---------------------------------------------------
+export const KNOCKOUT_TIME = 5;     // seconds a caught thief stays down
+export const KNOCKOUT_IMMUNITY = 4; // extra seconds after waking up when guards ignore you
+export const EYE_HEIGHT = { standing: 1.5, crouching: 0.9 };

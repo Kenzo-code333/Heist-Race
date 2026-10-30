@@ -10,18 +10,17 @@ ambiguous pick the simplest option and say so.
 
 ## Current milestone
 
-**Milestone 2 — DONE:** room codes + shareable links (`?room=CODE`), lobby with
-host-only Start, up to 6 players, server-authoritative movement (clients send
-numbered inputs at 60 Hz, server simulates at 20 Hz and sends personal snapshots),
-client-side prediction + reconciliation for your own thief, 100 ms interpolation
-for others, name tags, host migration, pause screen.
+**Milestone 3 — DONE:** one guard (data-driven `GUARD_ROUTES`) patrolling with A*
+pathfinding, flashlight spotlight + floor vision cone clipped by walls, alert meter
+(suspicious "?" → chase "!"), crouching behind furniture taller than your eyes hides
+you, catch = 5 s knockout (+4 s immunity), red screen edges while chased.
 
 | # | Milestone | Status |
 |---|-----------|--------|
 | 1 | Setup, one floor, single player movement + camera + collision | ✅ |
 | 2 | Multiplayer: room links, lobby, 2+ players in sync | ✅ |
-| 3 | One guard: patrol, vision cone, chase, knockout | ⏳ |
-| 4 | Cash loot, exit, scoring, scoreboard (MVP) | |
+| 3 | One guard: patrol, vision cone, chase, knockout | ✅ |
+| 4 | Cash loot, exit, scoring, scoreboard (MVP) | ⏳ |
 | 5 | Noise, alarm meter, police escape timer | |
 | 6 | Locks, safes, paintings, vault, hiding, sabotage | |
 | 7 | Planning phase, gadgets, blueprint tablet + fog of war, emote wheel | |
@@ -56,13 +55,16 @@ shared/                 used by BOTH sides
   map.js                building as DATA: ROOMS, wall lines (+doors), OBSTACLES, DECOR,
                         SPAWN_POINTS → derived WALLS, DOORWAYS, COLLIDERS, roomAt()
   collision.js          circle-vs-axis-aligned-box push-out (2D floor plan)
+  sight.js              raycast / hasLineOfSight / inViewCone (2D slab method)
   movement.js           stepMovement(state, input, dt, colliders) — pure function, sub-stepped
 server/
   index.js              Express + Socket.io event wiring (+ /health)
   RoomManager.js        rooms by 4-letter code, one shared tick loop (TICK_RATE)
   Room.js               lobby → playing phases, host, roster, sends per-player snapshots
   Match.js              the authoritative heist simulation for one room
-  entities/Thief.js     server-side thief: validated input queue, rate-limited replay
+  entities/Thief.js     server-side thief: validated input queue, rate-limited replay, knockout
+  entities/Guard.js     guard state machine: patrol → suspicious → chase → search → return
+  ai/NavGrid.js         0.5 m grid + A* + path smoothing (built once from COLLIDERS)
 client/
   index.html            canvas container, HUD, start overlay
   src/main.js           entry point: app states (menu → lobby → match), render loop, idle menu camera
@@ -74,7 +76,9 @@ client/
     materials.js        cached PBR material catalogue (getMaterial(name))
     textures.js         procedural, tileable canvas textures (value noise) + painting generator
     geometry.js         helpers: boxGeo (UVs in metres), roundedBoxGeo, floorPlane, mesh()
-    ThiefModel.js       jointed character + procedural walk/run/crouch animation
+    CharacterModel.js   jointed character (outfit 'thief' | 'guard') + walk/run/crouch/knockout animation
+    GuardView.js        guard model + flashlight SpotLight + VisionCone + ?/! icon
+    VisionCone.js       fan of rays → translucent floor shape
     ThirdPersonCamera.js yaw/pitch orbit camera, shoulder offset, ray-vs-Box3 wall avoidance
     GameSession.js      one match on the client: prediction/reconciliation (own thief), interpolation (others)
     SnapshotBuffer.js   snapshot history + sampling at now - INTERPOLATION_DELAY

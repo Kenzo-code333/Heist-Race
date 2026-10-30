@@ -131,6 +131,14 @@ const FACTORIES = {
   thiefShoe: () => new THREE.MeshStandardMaterial({ color: 0x151515, roughness: 0.6 }),
   thiefBag: () => fabricMat(0x3d4231, 0.8),
   skin: () => new THREE.MeshStandardMaterial({ color: 0xc8957a, roughness: 0.6 }),
+  hair: () => new THREE.MeshStandardMaterial({ color: 0x2a1d14, roughness: 0.9 }),
+
+  // ----- Guard uniform -----
+  guardShirt: () => fabricMat(0x24375c, 0.85),
+  guardPants: () => fabricMat(0x1c1f26, 0.9),
+  guardCap: () => fabricMat(0x161c2b, 0.8),
+  flashLens: () => new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff2cc, emissiveIntensity: 5 }),
+  dizzyStar: () => new THREE.MeshStandardMaterial({ color: 0xffd34a, emissive: 0xffc020, emissiveIntensity: 2.5 }),
   eye: () => new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.1 }),
 };
 
