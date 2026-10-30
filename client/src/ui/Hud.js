@@ -21,9 +21,7 @@ export class Hud {
     this.barsEl = document.getElementById('hud-stance-bars');
     this.serverDot = document.getElementById('hud-server-dot');
     this.serverText = document.getElementById('hud-server-text');
-    this.overlay = document.getElementById('overlay');
-    this.playButton = document.getElementById('play-button');
-    this.loadingText = document.getElementById('loading-text');
+    this.root = document.getElementById('hud');
     this.last = {}; // only touch the page when something changed (cheaper)
   }
 
@@ -49,12 +47,7 @@ export class Hud {
     this.serverText.textContent = online ? 'Server: online' : 'Server: offline';
   }
 
-  showOverlay(visible) {
-    this.overlay.classList.toggle('hidden', !visible);
-  }
-
-  setReady() {
-    this.playButton.disabled = false;
-    this.loadingText.textContent = '';
+  setVisible(visible) {
+    this.root.classList.toggle('hidden', !visible);
   }
 }

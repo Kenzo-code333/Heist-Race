@@ -1,109 +1,134 @@
 // ============================================================================
 // client/src/main.js — ENTRY POINT of the browser game
 // ----------------------------------------------------------------------------
-// Wires all the pieces together and runs the GAME LOOP: ~60 times per second
-//   1. read input (keyboard + mouse)
-//   2. move the thief using the shared movement rules (with collisions)
-//   3. animate the thief model and move the camera
-//   4. update the HUD and draw the frame
+// Creates the long-lived pieces (renderer + building, network, input, UI) and
+// switches between the app's states:
 //
-// Milestone 1 runs movement here in the browser. In Milestone 2 the server
-// becomes the authority, running the very same shared/movement.js code.
+//   menu  → (create / join)  → lobby → (host starts) → match
+//
+// During a match, a GameSession does the per-frame work (see GameSession.js).
+// Outside a match, the camera slowly drifts through the building as a backdrop.
 // ============================================================================
 
 import { Renderer } from './game/Renderer.js';
 import { buildLevel } from './game/LevelBuilder.js';
-import { ThiefModel } from './game/ThiefModel.js';
-import { ThirdPersonCamera } from './game/ThirdPersonCamera.js';
+import { GameSession } from './game/GameSession.js';
 import { Input } from './input/Input.js';
 import { Hud } from './ui/Hud.js';
+import { Screens } from './ui/Screens.js';
 import { Network } from './net/Network.js';
-import { stepMovement } from '../../shared/movement.js';
-import { COLLIDERS, SPAWN_POINTS, roomAt } from '../../shared/map.js';
 
 const hud = new Hud();
 const renderer = new Renderer(document.getElementById('game'));
-new Network((online) => hud.setServerStatus(online));
+const network = new Network();
 const input = new Input(renderer.renderer.domElement);
 
-// The player's state. (In JavaScript, `const` means the variable can't be
-// re-assigned, but the object's fields can still change — like a Python dict.)
-const spawn = SPAWN_POINTS[0];
-const player = { x: spawn.x, z: spawn.z, moveMode: 'idle', crouching: false, facing: 0, speed: 0 };
+let cameraBlockers = [];
+let session = null;      // the current GameSession, or null outside a match
+let roomState = null;    // latest lobby info from the server
 
-let thief, camera;
+// ---------------------------------------------------------------- UI actions
+const screens = new Screens({
+  async onCreate(name) {
+    screens.setBusy(true);
+    const result = await network.createRoom(name);
+    screens.setBusy(false);
+    handleJoinResult(result);
+  },
+  async onJoin(code, name) {
+    if (!code.trim()) return screens.showError('Type the 4-letter room code first.');
+    screens.setBusy(true);
+    const result = await network.joinRoom(code, name);
+    screens.setBusy(false);
+    handleJoinResult(result);
+  },
+  onStart() {
+    network.startMatch();
+  },
+  onLeave() {
+    network.leaveRoom();
+    roomState = null;
+    screens.show('menu');
+  },
+  onResume() {
+    input.requestLock();
+  },
+});
 
+function handleJoinResult(result) {
+  if (!result?.ok) return screens.showError(result?.error ?? 'Something went wrong.');
+  screens.showError('');
+  // Put the room code in the address bar so a refresh / copy-paste keeps it.
+  history.replaceState(null, '', `?room=${result.code}`);
+  screens.show('lobby');
+}
+
+// ---------------------------------------------------------------- server events
+network.on('connect', () => hud.setServerStatus(true));
+network.on('disconnect', () => {
+  hud.setServerStatus(false);
+  endSession();
+  screens.show('menu');
+  screens.showError('Lost connection to the server.');
+});
+
+network.on('room:state', (state) => {
+  roomState = state;
+  if (!session) screens.updateLobby(state, network.id);
+});
+
+network.on('match:start', ({ roster }) => {
+  endSession();
+  session = new GameSession({ renderer, network, input, hud, cameraBlockers }, roster);
+  hud.setVisible(true);
+  screens.show('pause');
+  input.requestLock(); // may be refused without a click; the pause screen covers that
+});
+
+function endSession() {
+  session?.dispose();
+  session = null;
+  hud.setVisible(false);
+  if (document.pointerLockElement) document.exitPointerLock();
+}
+
+// Mouse captured = playing; released = show the pause screen (match only).
+input.onLockChange = (locked) => {
+  if (session) screens.show(locked ? null : 'pause');
+};
+
+// ---------------------------------------------------------------- start-up
 // Building the level generates many textures, which takes a moment. We wait
 // one frame first so the "Building the vault…" text can appear on screen.
 requestAnimationFrame(() => setTimeout(start, 0));
 
 function start() {
-  const { cameraBlockers } = buildLevel(renderer.scene);
-
-  thief = new ThiefModel(0xe8b04a);
-  renderer.scene.add(thief.root);
-
-  camera = new ThirdPersonCamera(renderer.camera, cameraBlockers);
-  camera.yaw = 0; // spawn facing north, towards the corridor
-
-  // Compile all shaders now, so the first frames don't stutter.
-  renderer.renderer.compile(renderer.scene, renderer.camera);
-
-  // Start / pause handling: click to capture the mouse, Esc to release it.
-  hud.playButton.addEventListener('click', () => input.requestLock());
-  input.onLockChange = (locked) => hud.showOverlay(!locked);
-  hud.setReady();
+  ({ cameraBlockers } = buildLevel(renderer.scene));
+  renderer.renderer.compile(renderer.scene, renderer.camera); // pre-compile shaders: no stutter later
+  screens.setBusy(false);
+  screens.show('menu');
 
   // Handy for debugging in the browser console (development only).
-  if (import.meta.env.DEV) window.heist = { player, camera, renderer, input };
+  if (import.meta.env.DEV) window.heist = { renderer, network, input, get session() { return session; } };
 
   lastTime = performance.now();
   requestAnimationFrame(loop);
 }
 
-// Turn smoothly from angle `current` towards `target` (handles wrap-around).
-function turnTowards(current, target, maxStep) {
-  let diff = target - current;
-  diff = Math.atan2(Math.sin(diff), Math.cos(diff)); // shortest way round, -PI..PI
-  return current + Math.max(-maxStep, Math.min(maxStep, diff));
+// Backdrop camera for the menu: a slow pan across the gallery.
+function idleCamera(now) {
+  const t = now / 1000;
+  const cam = renderer.camera;
+  cam.position.set(19 + Math.sin(t * 0.07) * 5, 2.3, 7.2);
+  cam.lookAt(21 + Math.sin(t * 0.07 + 1) * 4, 1.3, 1.5);
 }
 
 let lastTime = 0;
 function loop(now) {
-  // dt = seconds since the previous frame (capped so a pause doesn't cause a huge jump)
-  const dt = Math.min(0.05, (now - lastTime) / 1000);
+  const dt = Math.min(0.1, (now - lastTime) / 1000); // seconds since the previous frame
   lastTime = now;
-
-  // 1) Input
-  const { dx, dy } = input.consumeMouse();
-  camera.rotate(dx, dy);
-  const move = input.getMovement();
-
-  // 2) Movement (shared rules + collision)
-  const before = { x: player.x, z: player.z };
-  const result = stepMovement(player, { ...move, yaw: camera.yaw }, dt, COLLIDERS);
-  player.x = result.x;
-  player.z = result.z;
-  player.moveMode = result.moveMode;
-  player.crouching = move.crouch;
-  player.speed = dt > 0 ? Math.hypot(player.x - before.x, player.z - before.z) / dt : 0;
-
-  // Face the direction we're moving in (yaw convention: 0 = facing -z).
-  if (result.moveMode !== 'idle') {
-    const targetFacing = Math.atan2(-result.dirX, -result.dirZ);
-    player.facing = turnTowards(player.facing, targetFacing, dt * 12);
-  }
-
-  // 3) Visuals
-  thief.root.position.set(player.x, 0, player.z);
-  thief.root.rotation.y = player.facing;
-  thief.update(dt, player.speed, player.crouching);
-  camera.update(dt, player, player.crouching);
-
-  // 4) HUD + draw
-  hud.setRoom(roomAt(player.x, player.z)?.name ?? '—');
-  hud.setStance(player.moveMode, player.crouching);
+  if (session) session.update(dt);
+  else idleCamera(now);
   renderer.render();
-
   requestAnimationFrame(loop);
 }

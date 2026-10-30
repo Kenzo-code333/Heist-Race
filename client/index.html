@@ -10,8 +10,8 @@
     <!-- The 3D view is drawn into this element -->
     <div id="game"></div>
 
-    <!-- HUD: always-visible information drawn on top of the 3D view -->
-    <div id="hud">
+    <!-- HUD: always-visible information drawn on top of the 3D view (in a match) -->
+    <div id="hud" class="hidden">
       <div id="hud-top-left">
         <div class="hud-title">HEIST RACE</div>
         <div id="hud-room">—</div>
@@ -28,12 +28,44 @@
       <div id="hud-crosshair"></div>
     </div>
 
-    <!-- Shown when the mouse is not captured (start / after pressing Esc) -->
+    <!-- Full-screen panels. Only one is visible at a time. -->
     <div id="overlay">
-      <div class="overlay-card">
+      <!-- 1) Main menu: pick a name, create or join a room -->
+      <div class="overlay-card screen" id="screen-menu">
         <h1>HEIST RACE</h1>
-        <p class="subtitle">Milestone 1 — walk the building</p>
-        <button id="play-button">Click to play</button>
+        <p class="subtitle">Rival thieves. One building. Only what you carry out counts.</p>
+        <label class="field">Your thief name
+          <input id="menu-name" maxlength="16" placeholder="e.g. Lupin" autocomplete="off" />
+        </label>
+        <button id="menu-create" class="primary">Create a room</button>
+        <div class="divider"><span>or join a friend</span></div>
+        <div class="row">
+          <input id="menu-code" maxlength="4" placeholder="CODE" autocomplete="off" />
+          <button id="menu-join">Join</button>
+        </div>
+        <p id="menu-error" class="error"></p>
+        <p id="loading-text">Building the vault…</p>
+      </div>
+
+      <!-- 2) Lobby: share the code, wait for the host to start -->
+      <div class="overlay-card screen hidden" id="screen-lobby">
+        <p class="subtitle">Room code</p>
+        <div id="lobby-code" class="room-code">----</div>
+        <div class="row">
+          <input id="lobby-link" readonly />
+          <button id="lobby-copy">Copy link</button>
+        </div>
+        <ul id="lobby-players"></ul>
+        <button id="lobby-start" class="primary">Start the heist</button>
+        <p id="lobby-wait" class="subtitle">Waiting for the host to start…</p>
+        <button id="lobby-leave" class="link">Leave room</button>
+      </div>
+
+      <!-- 3) Pause: shown in a match whenever the mouse is not captured -->
+      <div class="overlay-card screen hidden" id="screen-pause">
+        <h1>HEIST RACE</h1>
+        <p class="subtitle" id="pause-subtitle">The heist goes on without you!</p>
+        <button id="pause-resume" class="primary">Click to play</button>
         <table class="controls">
           <tr><td>W A S D</td><td>Move (Z Q S D on AZERTY)</td></tr>
           <tr><td>Mouse</td><td>Look around</td></tr>
@@ -41,7 +73,6 @@
           <tr><td>C</td><td>Toggle crouch-sneak — silent</td></tr>
           <tr><td>Esc</td><td>Release the mouse</td></tr>
         </table>
-        <p id="loading-text">Building the vault…</p>
       </div>
     </div>
 

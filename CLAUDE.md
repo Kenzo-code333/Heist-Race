@@ -10,18 +10,17 @@ ambiguous pick the simplest option and say so.
 
 ## Current milestone
 
-**Milestone 1 — DONE (awaiting feedback):** one floor (Office, Gallery, Corridor,
-Lobby, Storage, Vault Room) with doorways, a single thief who walks / runs (Shift) /
-crouch-sneaks (C toggle), third-person camera with mouse look and wall avoidance,
-circle-vs-box collision. Detailed procedural graphics (no external assets).
-
-Next: Milestone 2 — multiplayer (room links, lobby, server-authoritative movement).
+**Milestone 2 — DONE:** room codes + shareable links (`?room=CODE`), lobby with
+host-only Start, up to 6 players, server-authoritative movement (clients send
+numbered inputs at 60 Hz, server simulates at 20 Hz and sends personal snapshots),
+client-side prediction + reconciliation for your own thief, 100 ms interpolation
+for others, name tags, host migration, pause screen.
 
 | # | Milestone | Status |
 |---|-----------|--------|
 | 1 | Setup, one floor, single player movement + camera + collision | ✅ |
-| 2 | Multiplayer: room links, lobby, 2+ players in sync | ⏳ |
-| 3 | One guard: patrol, vision cone, chase, knockout | |
+| 2 | Multiplayer: room links, lobby, 2+ players in sync | ✅ |
+| 3 | One guard: patrol, vision cone, chase, knockout | ⏳ |
 | 4 | Cash loot, exit, scoring, scoreboard (MVP) | |
 | 5 | Noise, alarm meter, police escape timer | |
 | 6 | Locks, safes, paintings, vault, hiding, sabotage | |
@@ -45,7 +44,9 @@ npm run dev        # server on :3000 + Vite client on :5173 → open http://loca
 - `npm run build && npm start` — production: the Node server serves `/dist` on :3000.
 - Graphics switches via URL: `?quality=low`, or individually `?ao=0`, `?bloom=0`, `?shadows=0`.
 - Server health check: http://localhost:3000/health
-- In dev, the browser console exposes `window.heist` (player, camera, renderer, input).
+- In dev, the browser console exposes `window.heist` (renderer, network, input, session).
+- **Two players on one computer:** open http://localhost:5173 in two tabs/windows; create a
+  room in one, paste the link (or type the code) in the other.
 
 ## Architecture
 
@@ -57,10 +58,14 @@ shared/                 used by BOTH sides
   collision.js          circle-vs-axis-aligned-box push-out (2D floor plan)
   movement.js           stepMovement(state, input, dt, colliders) — pure function, sub-stepped
 server/
-  index.js              Express + Socket.io (M1: connection + /health only)
+  index.js              Express + Socket.io event wiring (+ /health)
+  RoomManager.js        rooms by 4-letter code, one shared tick loop (TICK_RATE)
+  Room.js               lobby → playing phases, host, roster, sends per-player snapshots
+  Match.js              the authoritative heist simulation for one room
+  entities/Thief.js     server-side thief: validated input queue, rate-limited replay
 client/
   index.html            canvas container, HUD, start overlay
-  src/main.js           entry point + game loop (input → movement → animate → camera → HUD → render)
+  src/main.js           entry point: app states (menu → lobby → match), render loop, idle menu camera
   src/style.css
   src/game/
     Renderer.js         WebGLRenderer, scene, camera, env reflections, GTAO + bloom post-processing, GRAPHICS flags
@@ -71,9 +76,21 @@ client/
     geometry.js         helpers: boxGeo (UVs in metres), roundedBoxGeo, floorPlane, mesh()
     ThiefModel.js       jointed character + procedural walk/run/crouch animation
     ThirdPersonCamera.js yaw/pitch orbit camera, shoulder offset, ray-vs-Box3 wall avoidance
+    GameSession.js      one match on the client: prediction/reconciliation (own thief), interpolation (others)
+    SnapshotBuffer.js   snapshot history + sampling at now - INTERPOLATION_DELAY
+    NameTag.js          canvas sprite labels
   src/input/Input.js    keyboard (event.code → AZERTY-safe) + pointer-lock mouse
-  src/ui/Hud.js         room name, stance/noise bars, server status, overlay
-  src/net/Network.js    Socket.io client (M1: online/offline status only)
+  src/ui/Hud.js         room name, stance/noise bars, server status
+  src/ui/Screens.js     menu / lobby / pause panels
+  src/net/Network.js    Socket.io client wrapper (requests with acks as Promises)
+
+### Network protocol (Socket.io events)
+
+- client → server: `room:create {name}` (ack), `room:join {code,name}` (ack), `room:leave`,
+  `room:start` (host only), `inputs [{seq, forward, back, left, right, run, crouch, yaw}]`
+- server → client: `room:state {code, hostId, phase, players}`, `match:start {roster}`,
+  `snap {t, you:{...,seq}, players:[{id,x,z,f,m,c}]}` (20 Hz, personal per player)
+- Every input = exactly 1/60 s of movement; the server replays at most ~real-time worth per tick.
 ```
 
 ### Conventions

@@ -76,3 +76,11 @@ export function stepMovement(state, input, dt, colliders) {
 
   return { x, z, moveMode, dirX, dirZ };
 }
+
+/**
+ * Which way a thief faces when moving in direction (dirX, dirZ).
+ * Same convention as the camera: 0 = facing -z.
+ */
+export function facingFromDirection(dirX, dirZ) {
+  return Math.atan2(-dirX, -dirZ);
+}

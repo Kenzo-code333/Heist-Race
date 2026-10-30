@@ -170,8 +170,11 @@ export const DECOR = [
   { type: 'rug', x: 15, z: 10, w: 28, d: 1.6, style: 'runner' },
 ];
 
-// Where players appear at the start (more spawn points / entry choice later).
-export const SPAWN_POINTS = [{ x: 6, z: 18 }];
+// Where players appear at the start: one spot per player slot (max 6).
+export const SPAWN_POINTS = [
+  { x: 6, z: 18 }, { x: 7.2, z: 18 }, { x: 4.8, z: 18 },
+  { x: 6, z: 17 }, { x: 7.2, z: 17 }, { x: 4.8, z: 17 },
+];
 
 // ===========================================================================
 // HELPER: turn the wall lines into solid boxes, cutting gaps for doors.
