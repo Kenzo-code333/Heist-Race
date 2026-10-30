@@ -10,11 +10,14 @@ ambiguous pick the simplest option and say so.
 
 ## Current milestone
 
-**Milestone 5 — DONE:** footstep noise pulses (sneak 0 m, walk 2.5 m, run 8 m; walls
-muffle ×0.6), calm guards investigate noises, rivals see noise ripples (you see your
-own as blue rings), 3 sweeping security cameras, shared alarm meter (sightings,
-chases, noises, knockouts, cameras), at 100% a 60 s police countdown + siren; anyone
-still inside when it ends loses their loot. Scoreboard says why the match ended.
+**Milestone 6 — DONE:** real doors in every interior doorway (tap E open/close, hold
+to lock, 3 start locked → hold 4 s to pick; guards have keys and re-lock behind them;
+closed doors block movement, sight and muffle noise), 2 safes (7 s crack, progress
+saved for anyone), 5 gallery paintings (heavy: no running, weight 3 = max), vault
+(3 loud 8 s drilling stages → 4 gold bars, weight 1 each), 4 closets to hide in
+(invisible to guards, cameras and players), light switches per room (dark room:
+guards see 4 m, cameras blind; a guard comes to fix it after 20 s). Knockouts drop all
+bulky loot.
 
 | # | Milestone | Status |
 |---|-----------|--------|
@@ -23,8 +26,8 @@ still inside when it ends loses their loot. Scoreboard says why the match ended.
 | 3 | One guard: patrol, vision cone, chase, knockout | ✅ |
 | 4 | Cash loot, exit, scoring, scoreboard (MVP) | ✅ |
 | 5 | Noise, alarm meter, police escape timer | ✅ |
-| 6 | Locks, safes, paintings, vault, hiding, sabotage | ⏳ |
-| 7 | Planning phase, gadgets, blueprint tablet + fog of war, emote wheel | |
+| 6 | Locks, safes, paintings, vault, hiding, sabotage | ✅ |
+| 7 | Planning phase, gadgets, blueprint tablet + fog of war, emote wheel | ⏳ |
 
 ## Stack
 
@@ -53,12 +56,15 @@ npm run dev        # server on :3000 + Vite client on :5173 → open http://loca
 ```
 shared/                 used by BOTH sides
   constants.js          speeds, sizes, tick rate, port
-  map.js                building as DATA: ROOMS, wall lines (+doors), OBSTACLES, DECOR,
-                        SPAWN_POINTS → derived WALLS, DOORWAYS, COLLIDERS, roomAt()
+  map.js                building as DATA: ROOMS, wall lines (+doors), OBSTACLES, DECOR, LOOT, SAFES,
+                        VAULT, CLOSET_IDS, LIGHT_SWITCHES, EXITS, SECURITY_CAMERAS, GUARD_ROUTES,
+                        SPAWN_POINTS → derived WALLS, DOORWAYS, DOORS, COLLIDERS, vision blockers,
+                        withClosedDoors(), frontOf(), roomAt()
   collision.js          circle-vs-axis-aligned-box push-out (2D floor plan)
   sight.js              raycast / hasLineOfSight / inViewCone (2D slab method)
   interactions.js       findInteraction(actor, world) → { kind, targetId, duration, label }
-  movement.js           stepMovement(state, input, dt, colliders) — pure function, sub-stepped
+  movement.js           stepMovement(state, input, dt, colliders) — pure function, sub-stepped;
+                        restrictInput() (knocked out / hidden / heavy loot) used by both sides
 server/
   index.js              Express + Socket.io event wiring (+ /health)
   RoomManager.js        rooms by 4-letter code, one shared tick loop (TICK_RATE)
@@ -74,7 +80,8 @@ client/
   src/style.css
   src/game/
     Renderer.js         WebGLRenderer, scene, camera, env reflections, GTAO + bloom post-processing, GRAPHICS flags
-    LevelBuilder.js     map data → floors, ceilings, walls (per-room finish), trim, door frames, lights, props
+    LevelBuilder.js     map data → floors, ceilings, walls (per-room finish), trim, door frames, lights,
+                        props; returns handles: cameraBlockers, props (by id), doors, lights (per room)
     props.js            furniture/decor builders (PROP_BUILDERS registry), local space: front = +z
     materials.js        cached PBR material catalogue (getMaterial(name))
     textures.js         procedural, tileable canvas textures (value noise) + painting generator

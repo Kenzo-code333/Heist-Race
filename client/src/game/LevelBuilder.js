@@ -4,12 +4,15 @@
 // Reads the building DATA from shared/map.js and builds the 3D scene from it:
 // floors, ceilings, walls (with trim), door frames, lights and all the props.
 //
-// It also returns `cameraBlockers`: 3D boxes the camera must not pass through
-// (so the third-person camera never ends up inside or behind a wall).
+// It also returns handles the game uses later:
+//   cameraBlockers : 3D boxes the camera must not pass through
+//   props          : furniture with an id (safes, vault...) to animate
+//   doors          : door leaves to swing open/closed
+//   lights         : per-room light control (cutting the lights)
 // ============================================================================
 
 import * as THREE from 'three';
-import { ROOMS, WALLS, DOORWAYS, OBSTACLES, DECOR, EXITS, roomAt } from '../../../shared/map.js';
+import { ROOMS, WALLS, DOORWAYS, DOORS, OBSTACLES, DECOR, EXITS, LIGHT_SWITCHES, roomAt } from '../../../shared/map.js';
 import { WALL_HEIGHT, WALL_THICKNESS, DOOR_HEIGHT } from '../../../shared/constants.js';
 import { boxGeo, boxMesh, mesh, floorPlane } from './geometry.js';
 import { getMaterial } from './materials.js';
@@ -22,7 +25,6 @@ const FACE_ROTATION = { s: 0, e: Math.PI / 2, n: Math.PI, w: -Math.PI / 2 };
 /**
  * Build the whole level and add it to the scene.
  * @param {THREE.Scene} scene
- * @returns {{ cameraBlockers: THREE.Box3[] }}
  */
 export function buildLevel(scene) {
   const level = new THREE.Group();
@@ -32,13 +34,15 @@ export function buildLevel(scene) {
   buildFloorsAndCeilings(level);
   buildWalls(level, cameraBlockers);
   buildDoorways(level, cameraBlockers);
-  buildLights(level);
-  buildObstacles(level, cameraBlockers);
+  const lights = buildLights(level);
+  const props = buildObstacles(level, cameraBlockers);
   buildDecor(level);
   buildExits(level);
+  const doors = buildDoors(level);
+  buildLightSwitches(level, lights);
 
   scene.add(level);
-  return { cameraBlockers };
+  return { cameraBlockers, props, doors, lights };
 }
 
 // ---------------------------------------------------------------------------
@@ -165,12 +169,18 @@ function buildDoorways(level, cameraBlockers) {
 
 // One ceiling light fixture + a real light source per entry in room.lights.
 // Only the FIRST light in each room casts shadows (shadows are expensive).
+// Returns { roomId: { setDark(bool) } } so the game can cut the lights.
 function buildLights(level) {
+  const control = {};
   for (const room of ROOMS) {
+    const spots = [];
+    // Each room gets its own copy of the glowing panel material, so its
+    // panels can be switched off without affecting other rooms.
+    const panelMaterial = getMaterial('lightPanel').clone();
     room.lights.forEach(([x, z], index) => {
       // Visible fixture: a recessed glowing panel with a metal rim.
       boxMesh(0.66, 0.03, 0.66, 'brushedSteel', [x, WALL_HEIGHT - 0.01, z], level).castShadow = false;
-      const panel = boxMesh(0.6, 0.02, 0.6, 'lightPanel', [x, WALL_HEIGHT - 0.025, z], level);
+      const panel = boxMesh(0.6, 0.02, 0.6, panelMaterial, [x, WALL_HEIGHT - 0.025, z], level);
       panel.castShadow = false;
 
       // The light itself: a spotlight pointing straight down with soft edges.
@@ -190,6 +200,7 @@ function buildLights(level) {
         light.shadow.camera.far = 12;
       }
       level.add(light, light.target);
+      spots.push({ light, intensity: light.intensity });
     });
 
     // One weak omni light per room, just under the ceiling, so the upper walls
@@ -197,6 +208,75 @@ function buildLights(level) {
     const fill = new THREE.PointLight(room.mood.color, 2.2 * room.mood.intensity, 14, 1.5);
     fill.position.set((room.minX + room.maxX) / 2, WALL_HEIGHT - 0.7, (room.minZ + room.maxZ) / 2);
     level.add(fill);
+    const fillIntensity = fill.intensity;
+
+    control[room.id] = {
+      dark: false,
+      switchProp: null,
+      setDark(dark) {
+        if (this.dark === dark) return;
+        this.dark = dark;
+        // Lights don't vanish (that would force shaders to recompile): they dim to zero.
+        for (const s of spots) s.light.intensity = dark ? 0 : s.intensity;
+        fill.intensity = dark ? fillIntensity * 0.12 : fillIntensity;
+        fill.color.setHex(dark ? 0x4060a0 : room.mood.color); // faint blue "night" glow
+        panelMaterial.emissiveIntensity = dark ? 0 : 3;
+        this.switchProp?.userData.setOn(!dark);
+      },
+    };
+  }
+  return control;
+}
+
+// Real doors in the doorways: a wooden leaf on a hinge, with a lock light
+// (red = locked, green = unlocked) on both sides.
+function buildDoors(level) {
+  const views = {};
+  const leafMat = getMaterial('walnut');
+  for (const door of DOORS) {
+    const w = door.width - 0.04;
+    const base = new THREE.Group();          // sits at the hinge, aligned with the wall
+    const along = door.axis === 'x';
+    base.position.set(along ? door.x - door.width / 2 + 0.02 : door.x, 0, along ? door.z : door.z - door.width / 2 + 0.02);
+    if (!along) base.rotation.y = -Math.PI / 2; // local +x runs along the wall
+    const pivot = new THREE.Group();          // rotates to open
+    base.add(pivot);
+    boxMesh(w, DOOR_HEIGHT - 0.02, 0.05, leafMat, [w / 2, (DOOR_HEIGHT - 0.02) / 2, 0], pivot);
+    // Raised panels for detail, both faces
+    for (const side of [-1, 1]) {
+      for (const [py, ph] of [[0.55, 0.7], [1.5, 0.85]]) {
+        boxMesh(w - 0.3, ph, 0.012, leafMat, [w / 2, py, side * 0.03], pivot);
+      }
+      boxMesh(0.12, 0.025, 0.05, 'brass', [w - 0.12, 1.02, side * 0.05], pivot);       // handle
+      boxMesh(0.05, 0.12, 0.01, 'brass', [w - 0.1, 1.02, side * 0.03], pivot);         // lock plate
+    }
+    const ledMat = new THREE.MeshStandardMaterial({ color: 0x111111, emissive: 0xff2010, emissiveIntensity: 3 });
+    for (const side of [-1, 1]) {
+      const led = new THREE.Mesh(new THREE.SphereGeometry(0.012, 8, 6), ledMat);
+      led.position.set(w - 0.1, 1.12, side * 0.037);
+      pivot.add(led);
+    }
+    level.add(base);
+    views[door.id] = { pivot, ledMat, angle: 0, open: false, locked: door.locked };
+  }
+  return views;
+}
+
+/** Animate a door view towards its open/closed state. */
+export function animateDoor(view, open, locked, dt) {
+  view.ledMat.emissive.setHex(locked ? 0xff2010 : 0x30ff60);
+  const target = open ? -1.75 : 0;
+  view.angle += (target - view.angle) * (1 - Math.exp(-dt * 8));
+  view.pivot.rotation.y = view.angle;
+}
+
+function buildLightSwitches(level, lights) {
+  for (const sw of LIGHT_SWITCHES) {
+    const prop = buildProp('lightSwitch', {});
+    placeOnPlan(prop, sw.x, sw.y, sw.z, sw.face);
+    prop.userData.setOn(true);
+    level.add(prop);
+    lights[sw.room].switchProp = prop;
   }
 }
 
@@ -206,6 +286,7 @@ function placeOnPlan(object, x, y, z, face) {
 }
 
 function buildObstacles(level, cameraBlockers) {
+  const byId = {};
   OBSTACLES.forEach((o, index) => {
     // Map sizes are in world axes. If the object is turned sideways (faces
     // east/west), its own width is the world depth and vice versa.
@@ -214,12 +295,14 @@ function buildObstacles(level, cameraBlockers) {
     const prop = buildProp(o.type, params);
     placeOnPlan(prop, o.x, 0, o.z, o.face);
     level.add(prop);
+    if (o.id) byId[o.id] = prop;
 
     cameraBlockers.push(new THREE.Box3(
       new THREE.Vector3(o.x - o.w / 2, 0, o.z - o.d / 2),
       new THREE.Vector3(o.x + o.w / 2, o.h, o.z + o.d / 2),
     ));
   });
+  return byId;
 }
 
 // A glowing green marking on the floor at each exit.

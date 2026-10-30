@@ -7,7 +7,7 @@
 // feedback) can run the exact same code and get the same answer.
 // ============================================================================
 
-import { SPEED, PLAYER_RADIUS } from './constants.js';
+import { SPEED, PLAYER_RADIUS, LOOT_WEIGHT } from './constants.js';
 import { resolveCircleVsBoxes } from './collision.js';
 
 // Never move more than this per collision check, so fast movement or a lag
@@ -83,4 +83,16 @@ export function stepMovement(state, input, dt, colliders) {
  */
 export function facingFromDirection(dirX, dirZ) {
   return Math.atan2(-dirX, -dirZ);
+}
+
+/**
+ * Movement restrictions, applied by the server AND by the client's prediction:
+ *   knocked out or hidden in a closet → can't move
+ *   carrying heavy loot (a painting, gold) → can't run
+ */
+export function restrictInput(input, { knockedOut, hidden, items }) {
+  if (knockedOut || hidden) return { ...input, forward: false, back: false, left: false, right: false };
+  const heavy = (items ?? []).some((item) => (LOOT_WEIGHT[item.type] ?? 0) > 0);
+  if (heavy) return { ...input, run: false };
+  return input;
 }

@@ -19,6 +19,7 @@
 
 import * as THREE from 'three';
 import { mesh, cylinderMesh, roundedBoxGeo } from './geometry.js';
+import { buildProp } from './props.js';
 
 const HIP_HEIGHT = 0.92;   // standing hip height (m)
 const THIGH = 0.44;        // thigh length
@@ -168,6 +169,41 @@ export class CharacterModel {
       this.flashlightTip.position.set(0, 0, -0.12);
       hand.add(this.flashlightTip);
       this.flashlightHand = hand;
+    }
+  }
+
+  /**
+   * Show what the thief carries: a painting strapped to the back, gold bars
+   * sticking out of the backpack.
+   * @param {number} paintingSeed - 0 = no painting
+   * @param {number} goldCount
+   */
+  setCarrying(paintingSeed, goldCount) {
+    if (this.outfit !== 'thief') return;
+    if (paintingSeed !== (this.carriedSeed ?? 0)) {
+      if (this.carriedPainting) this.torso.remove(this.carriedPainting);
+      this.carriedPainting = null;
+      if (paintingSeed) {
+        const art = buildProp('painting', { w: 0.8, h: 0.6, seed: paintingSeed });
+        art.position.set(0, 0.32, 0.29); // on the back (+z), facing backwards
+        art.rotation.z = 0.15;
+        this.torso.add(art);
+        this.carriedPainting = art;
+      }
+      this.carriedSeed = paintingSeed;
+    }
+    if (goldCount !== (this.goldCount ?? 0)) {
+      this.goldCount = goldCount;
+      if (!this.goldGroup) {
+        this.goldGroup = new THREE.Group();
+        this.goldGroup.position.set(0, 0.5, 0.19);
+        this.torso.add(this.goldGroup);
+      }
+      this.goldGroup.clear();
+      for (let i = 0; i < goldCount; i++) {
+        const bar = mesh(new THREE.BoxGeometry(0.16, 0.05, 0.07), 'gold', [(i - 1) * 0.08, i * 0.02, 0], this.goldGroup);
+        bar.rotation.z = (i - 1) * 0.3;
+      }
     }
   }
 

@@ -401,27 +401,56 @@ function vaultDoor({ w, d, h }) {
   boxMesh(w, h, 0.3, 'darkSteel', [0, h / 2, backZ + 0.15], g);                   // wall frame
   const ring = cylinderMesh(1.28, 1.28, 0.1, 'brushedSteel', [0, centreY, backZ + 0.35], g, 64);
   ring.rotation.x = Math.PI / 2;
-  const doorDisk = cylinderMesh(1.15, 1.15, 0.22, 'brushedSteel', [0, centreY, backZ + 0.46], g, 64);
+  // Dark recess behind the door (seen when it opens)
+  const recess = cylinderMesh(1.12, 1.12, 0.02, 'blackPlastic', [0, centreY, backZ + 0.41], g, 48);
+  recess.rotation.x = Math.PI / 2;
+  // Everything that swings open hangs from a hinge pivot on the right side.
+  const pivot = new THREE.Group();
+  pivot.position.set(1.2, 0, 0);
+  g.add(pivot);
+  const P = (x) => x - 1.2; // x position relative to the hinge
+  const doorDisk = cylinderMesh(1.15, 1.15, 0.22, 'brushedSteel', [P(0), centreY, backZ + 0.46], pivot, 64);
   doorDisk.rotation.x = Math.PI / 2;
   const frontZ = backZ + 0.57;
   for (const [radius, tube] of [[0.95, 0.025], [0.6, 0.02]]) {                    // decorative rings
-    mesh(new THREE.TorusGeometry(radius, tube, 10, 64), 'darkSteel', [0, centreY, frontZ], g);
+    mesh(new THREE.TorusGeometry(radius, tube, 10, 64), 'darkSteel', [P(0), centreY, frontZ], pivot);
   }
   for (let i = 0; i < 18; i++) {                                                  // locking bolts
     const a = (i / 18) * Math.PI * 2;
-    const bolt = cylinderMesh(0.035, 0.035, 0.05, 'chrome', [Math.cos(a) * 1.06, centreY + Math.sin(a) * 1.06, frontZ + 0.01], g, 12);
+    const bolt = cylinderMesh(0.035, 0.035, 0.05, 'chrome', [P(Math.cos(a) * 1.06), centreY + Math.sin(a) * 1.06, frontZ + 0.01], pivot, 12);
     bolt.rotation.x = Math.PI / 2;
   }
   // Spoked wheel handle
-  mesh(new THREE.TorusGeometry(0.34, 0.03, 12, 48), 'chrome', [0, centreY, frontZ + 0.14], g);
+  const wheel = new THREE.Group();
+  wheel.position.set(P(0), centreY, frontZ + 0.14);
+  pivot.add(wheel);
+  mesh(new THREE.TorusGeometry(0.34, 0.03, 12, 48), 'chrome', [0, 0, 0], wheel);
   for (let i = 0; i < 3; i++) {
-    const spoke = boxMesh(0.68, 0.035, 0.035, 'chrome', [0, centreY, frontZ + 0.14], g);
+    const spoke = boxMesh(0.68, 0.035, 0.035, 'chrome', [0, 0, 0], wheel);
     spoke.rotation.z = (i * Math.PI) / 3;
   }
-  const hub = cylinderMesh(0.08, 0.08, 0.16, 'darkSteel', [0, centreY, frontZ + 0.07], g, 24);
+  const hub = cylinderMesh(0.08, 0.08, 0.16, 'darkSteel', [P(0), centreY, frontZ + 0.07], pivot, 24);
   hub.rotation.x = Math.PI / 2;
   // Hinges on the right
   for (const y of [0.75, 2.05]) cylinderMesh(0.09, 0.09, 0.42, 'darkSteel', [1.2, y, frontZ - 0.08], g, 20);
+  // Drilling progress lights above the door (one per stage)
+  const stageLights = [];
+  for (let i = 0; i < 3; i++) {
+    const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 8), new THREE.MeshStandardMaterial({ color: 0x220000, emissive: 0xff2010, emissiveIntensity: 2 }));
+    lamp.position.set(-0.25 + i * 0.25, 2.62, backZ + 0.33);
+    g.add(lamp);
+    stageLights.push(lamp);
+  }
+  // Called every frame by the game: stage = finished stages, progress 0..1, open 0..1
+  g.userData.setState = (stage, progress, openAmount) => {
+    pivot.rotation.y = openAmount * 1.9;
+    wheel.rotation.z = (stage + progress) * Math.PI * 2;
+    stageLights.forEach((lamp, i) => {
+      const done = i < stage;
+      lamp.material.emissive.setHex(done ? 0x30ff60 : 0xff2010);
+      lamp.material.emissiveIntensity = done ? 3 : (i === stage && progress > 0 ? 1.5 + Math.sin(performance.now() / 90) : 1);
+    });
+  };
   // Keypad on the left
   const padX = -1.5, padY = 1.35, padZ = backZ + 0.32;
   boxMesh(0.2, 0.3, 0.04, 'blackPlastic', [padX, padY, padZ], g);
@@ -502,6 +531,56 @@ function entranceDoors({ w, h }) {
   const backdrop = new THREE.Mesh(new THREE.PlaneGeometry(6, 3), new THREE.MeshBasicMaterial({ map: backdropTex }));
   backdrop.position.set(0, 1.4, -2.0);
   g.add(backdrop);
+  return g;
+}
+
+/** Heavy steel safe with a combination dial; the door swings open when cracked. */
+function safe({ w, d, h }) {
+  const g = new THREE.Group();
+  boxMesh(w, h, d, 'darkSteel', [0, h / 2, 0], g);
+  boxMesh(w + 0.02, 0.05, d + 0.02, 'blackPlastic', [0, 0.025, 0], g);
+  // Interior (visible when open)
+  boxMesh(w - 0.1, h - 0.12, 0.02, 'blackPlastic', [0, h / 2 + 0.02, d / 2 - 0.005], g);
+  const pivot = new THREE.Group();
+  pivot.position.set(-w / 2 + 0.03, 0, d / 2 + 0.03); // hinge on the left
+  g.add(pivot);
+  const doorW = w - 0.06;
+  boxMesh(doorW, h - 0.1, 0.05, 'brushedSteel', [doorW / 2, h / 2 + 0.02, 0], pivot);
+  const dial = cylinderMesh(0.07, 0.07, 0.035, 'chrome', [doorW / 2, h * 0.62, 0.04], pivot, 32);
+  dial.rotation.x = Math.PI / 2;
+  const handle = boxMesh(0.03, 0.18, 0.04, 'chrome', [doorW - 0.08, h * 0.45, 0.05], pivot);
+  const led = new THREE.Mesh(new THREE.SphereGeometry(0.015, 10, 8), new THREE.MeshStandardMaterial({ color: 0x220000, emissive: 0xff2010, emissiveIntensity: 3 }));
+  led.position.set(doorW / 2, h * 0.8, 0.03);
+  pivot.add(led);
+  g.userData.setState = (progress, openAmount) => {
+    pivot.rotation.y = -openAmount * 1.7;
+    dial.rotation.y = progress * Math.PI * 8;
+    led.material.emissive.setHex(openAmount > 0 ? 0x30ff60 : progress > 0 ? 0xffa020 : 0xff2010);
+  };
+  handle.castShadow = true;
+  return g;
+}
+
+/** A tall closet to hide in: a steel locker in work areas, a wooden wardrobe elsewhere. */
+function closet({ w, d, h, seed }) {
+  const g = new THREE.Group();
+  const wooden = seed % 2 === 0;
+  const mat = wooden ? 'walnut' : 'paintedMetal';
+  boxMesh(w, h, d, mat, [0, h / 2, 0], g);
+  for (const side of [-1, 1]) {
+    boxMesh(w / 2 - 0.02, h - 0.08, 0.02, mat, [side * (w / 4), h / 2, d / 2 + 0.01], g);   // two doors
+    boxMesh(0.02, 0.14, 0.03, wooden ? 'brass' : 'chrome', [side * 0.04, h * 0.52, d / 2 + 0.035], g);
+    if (!wooden) for (let i = 0; i < 4; i++) boxMesh(w / 2 - 0.12, 0.012, 0.022, 'blackPlastic', [side * (w / 4), h - 0.2 - i * 0.04, d / 2 + 0.021], g); // vents
+  }
+  return g;
+}
+
+/** Wall light switch panel with a little indicator. */
+function lightSwitch() {
+  const g = new THREE.Group();
+  boxMesh(0.09, 0.13, 0.015, 'whitePaint', [0, 0, 0.008], g);
+  const toggle = boxMesh(0.025, 0.045, 0.02, 'greyPlastic', [0, 0, 0.02], g);
+  g.userData.setOn = (on) => { toggle.rotation.x = on ? -0.35 : 0.35; };
   return g;
 }
 
@@ -590,7 +669,7 @@ function rugProp({ w, d, style }) {
 // ---------------------------------------------------------------------------
 export const PROP_BUILDERS = {
   desk, cabinet, bookshelf, plant, displayCase, bench, receptionDesk, sofa,
-  coffeeTable, shelf, crate, vaultDoor, depositBoxes, entranceDoors,
+  coffeeTable, shelf, crate, vaultDoor, depositBoxes, entranceDoors, safe, closet, lightSwitch,
   painting, exitSign, extinguisher, securityCamera, rug: rugProp,
 };
 

@@ -23,7 +23,7 @@ const renderer = new Renderer(document.getElementById('game'));
 const network = new Network();
 const input = new Input(renderer.renderer.domElement);
 
-let cameraBlockers = [];
+let level = null;        // handles from buildLevel(): camera blockers, doors, props, lights
 let session = null;      // the current GameSession, or null outside a match
 let roomState = null;    // latest lobby info from the server
 
@@ -95,7 +95,7 @@ input.onInteract = (down) => {
 
 network.on('match:start', ({ roster }) => {
   endSession();
-  session = new GameSession({ renderer, network, input, hud, cameraBlockers }, roster);
+  session = new GameSession({ renderer, network, input, hud, level }, roster);
   hud.setVisible(true);
   screens.show('pause');
   input.requestLock(); // may be refused without a click; the pause screen covers that
@@ -119,7 +119,7 @@ input.onLockChange = (locked) => {
 requestAnimationFrame(() => setTimeout(start, 0));
 
 function start() {
-  ({ cameraBlockers } = buildLevel(renderer.scene));
+  level = buildLevel(renderer.scene);
   renderer.renderer.compile(renderer.scene, renderer.camera); // pre-compile shaders: no stutter later
   screens.setBusy(false);
   screens.show('menu');

@@ -26,7 +26,7 @@
 //   (D = doorway, V = vault door)
 // ============================================================================
 
-import { WALL_THICKNESS, WALL_HEIGHT, DOOR_WIDTH, EYE_HEIGHT } from './constants.js';
+import { WALL_THICKNESS, WALL_HEIGHT, DOOR_WIDTH, DOOR_HEIGHT, EYE_HEIGHT } from './constants.js';
 
 // ---------------------------------------------------------------------------
 // 1) ROOMS: rectangles used for floor/ceiling materials, lights and labels.
@@ -110,6 +110,8 @@ export const OBSTACLES = [
   { type: 'cabinet', x: 11.0, z: 0.45, w: 0.5, d: 0.6, h: 1.32, face: 's' },
   { type: 'bookshelf', x: 0.33, z: 5.6, w: 0.42, d: 2.0, h: 2.1, face: 'e' },
   { type: 'plant', x: 11.35, z: 7.3, w: 0.55, d: 0.55, h: 1.4, face: 's' },
+  { type: 'safe', id: 'safe1', x: 8.6, z: 0.45, w: 0.7, d: 0.6, h: 0.9, face: 's' },
+  { type: 'closet', id: 'closetOffice', x: 11.58, z: 6.0, w: 0.6, d: 1.0, h: 2.0, face: 'w' },
 
   // --- Gallery ---
   { type: 'displayCase', x: 16, z: 2.5, w: 1.0, d: 1.0, h: 1.55, face: 's' },
@@ -122,6 +124,7 @@ export const OBSTACLES = [
   // --- Corridor ---
   { type: 'plant', x: 0.5, z: 8.6, w: 0.55, d: 0.55, h: 1.4, face: 'e' },
   { type: 'plant', x: 29.5, z: 11.4, w: 0.55, d: 0.55, h: 1.4, face: 'w' },
+  { type: 'closet', id: 'closetCorridor', x: 10, z: 11.58, w: 1.0, d: 0.6, h: 2.0, face: 'n' },
 
   // --- Lobby ---
   { type: 'entranceDoors', x: 6, z: 20, w: 2.2, d: 0.2, h: 2.2, face: 'n' }, // closed glass doors fill the entrance gap
@@ -135,10 +138,13 @@ export const OBSTACLES = [
   { type: 'shelf', x: 18.55, z: 16.0, w: 0.6, d: 3.0, h: 2.2, face: 'w' },
   { type: 'shelf', x: 15.6, z: 19.55, w: 3.0, d: 0.6, h: 2.2, face: 'n' },
   { type: 'crate', x: 13.0, z: 13.0, w: 0.9, d: 0.9, h: 0.9, face: 's' },
+  { type: 'closet', id: 'closetStorage', x: 12.42, z: 17.9, w: 0.6, d: 1.0, h: 2.0, face: 'e' },
   { type: 'crate', x: 12.85, z: 19.1, w: 1.0, d: 1.0, h: 1.0, face: 'n' },
 
   // --- Vault room ---
-  { type: 'vaultDoor', x: 29.55, z: 16.0, w: 0.7, d: 3.4, h: 2.8, face: 'w' },
+  { type: 'vaultDoor', id: 'vault', x: 29.55, z: 16.0, w: 0.7, d: 3.4, h: 2.8, face: 'w' },
+  { type: 'safe', id: 'safe2', x: 19.45, z: 18.6, w: 0.6, d: 0.7, h: 0.9, face: 'e' },
+  { type: 'closet', id: 'closetVault', x: 19.42, z: 13.1, w: 0.6, d: 1.0, h: 2.0, face: 'e' },
   { type: 'depositBoxes', x: 24.5, z: 19.75, w: 6.0, d: 0.4, h: 2.4, face: 'n' },
   { type: 'desk', x: 21.0, z: 13.6, w: 1.6, d: 0.8, h: 0.76, face: 's' },
 ];
@@ -149,13 +155,7 @@ export const OBSTACLES = [
 //    direction the item faces (into the room). y = height of its centre.
 // ---------------------------------------------------------------------------
 export const DECOR = [
-  // Paintings in the gallery (they become stealable loot in Milestone 6)
-  { type: 'painting', x: 15, z: 0.1, y: 1.65, w: 1.6, h: 1.1, face: 's', seed: 1 },
-  { type: 'painting', x: 19, z: 0.1, y: 1.65, w: 1.2, h: 1.5, face: 's', seed: 2 },
-  { type: 'painting', x: 23, z: 0.1, y: 1.65, w: 2.0, h: 1.2, face: 's', seed: 3 },
-  { type: 'painting', x: 27, z: 0.1, y: 1.65, w: 1.3, h: 1.0, face: 's', seed: 4 },
-  { type: 'painting', x: 29.9, z: 4, y: 1.65, w: 1.8, h: 1.3, face: 'w', seed: 5 },
-  // A couple of paintings elsewhere
+  // Decorative paintings (the gallery ones are LOOT, see below)
   { type: 'painting', x: 0.1, z: 2.0, y: 1.6, w: 0.9, h: 0.7, face: 'e', seed: 6 },
   { type: 'painting', x: 0.1, z: 16, y: 1.7, w: 1.4, h: 1.0, face: 'e', seed: 7 },
   // Corridor details
@@ -185,7 +185,45 @@ export const LOOT = [
   { id: 'c10', type: 'cash', x: 26.5, y: 0, z: 19.0, value: 800 },   // by the deposit boxes
   { id: 'c11', type: 'cash', x: 21.5, y: 0.45, z: 4.25, value: 550 },// gallery bench
   { id: 'c12', type: 'cash', x: 17, y: 0, z: 11.4, value: 250 },     // corridor floor (on the guard route!)
+  // Gallery paintings: valuable but HEAVY (no running, one at a time).
+  // (x, z) is the point on the wall; `face` is the direction they face.
+  { id: 'p1', type: 'painting', x: 15, z: 0.1, y: 1.65, w: 1.6, h: 1.1, face: 's', seed: 1, value: 3000 },
+  { id: 'p2', type: 'painting', x: 19, z: 0.1, y: 1.65, w: 1.2, h: 1.5, face: 's', seed: 2, value: 2500 },
+  { id: 'p3', type: 'painting', x: 23, z: 0.1, y: 1.65, w: 2.0, h: 1.2, face: 's', seed: 3, value: 4000 },
+  { id: 'p4', type: 'painting', x: 27, z: 0.1, y: 1.65, w: 1.3, h: 1.0, face: 's', seed: 4, value: 2200 },
+  { id: 'p5', type: 'painting', x: 29.9, z: 4, y: 1.65, w: 1.8, h: 1.3, face: 'w', seed: 5, value: 3500 },
 ];
+
+// SAFES (their furniture is in OBSTACLES with the same id): hold E to crack.
+// Progress is saved, so a rival can finish what you started...
+export const SAFES = [
+  { id: 'safe1', name: 'office safe', crackTime: 7, value: 1800 },
+  { id: 'safe2', name: 'vault-room safe', crackTime: 7, value: 2500 },
+];
+
+// THE VAULT: three drilling stages, each loud. When open, gold bars spill out.
+export const VAULT = {
+  id: 'vault', x: 28.75, z: 16, stages: 3, stageTime: 8,
+  gold: [{ x: 28.5, z: 15.25 }, { x: 28.5, z: 15.75 }, { x: 28.5, z: 16.25 }, { x: 28.5, z: 16.75 }],
+  goldValue: 2000,
+};
+
+// CLOSETS to hide in (furniture in OBSTACLES, same id). One thief per closet.
+export const CLOSET_IDS = ['closetOffice', 'closetCorridor', 'closetStorage', 'closetVault'];
+
+// LIGHT SWITCHES: one per room, on the wall by a door. Cutting the lights
+// makes guards nearly blind there (short flashlight range) and blinds cameras.
+export const LIGHT_SWITCHES = [
+  { room: 'office', x: 4.7, z: 7.9, y: 1.3, face: 'n' },
+  { room: 'gallery', x: 19.8, z: 7.9, y: 1.3, face: 'n' },
+  { room: 'corridor', x: 4.6, z: 11.9, y: 1.3, face: 'n' },
+  { room: 'lobby', x: 7.3, z: 12.1, y: 1.3, face: 's' },
+  { room: 'storage', x: 14.3, z: 12.1, y: 1.3, face: 's' },
+  { room: 'vaultRoom', x: 23.8, z: 12.1, y: 1.3, face: 's' },
+];
+
+// Interior doors that start LOCKED (others start closed but unlocked).
+const LOCKED_DOOR_SPOTS = ['12,4', '12,16', '25,12'];
 
 // EXITS: walk up and hold E to escape with everything you carry.
 export const EXITS = [
@@ -266,6 +304,20 @@ const { walls, doorways } = buildWalls(WALL_LINES);
 export const WALLS = walls;
 export const DOORWAYS = doorways;
 
+// DOORS: every standard interior doorway gets a real door (the wide main
+// entrance is the exit instead). Doors can be open/closed and locked.
+export const DOORS = DOORWAYS.filter((d) => d.width === DOOR_WIDTH).map((d, i) => ({
+  id: `door${i + 1}`, ...d, locked: LOCKED_DOOR_SPOTS.includes(`${d.x},${d.z}`),
+}));
+
+/** The solid rectangle of a CLOSED door (a thin slab filling the doorway). */
+export function doorBox(door) {
+  const half = door.width / 2, t = 0.06;
+  return door.axis === 'x'
+    ? { minX: door.x - half, maxX: door.x + half, minZ: door.z - t, maxZ: door.z + t, h: DOOR_HEIGHT }
+    : { minX: door.x - t, maxX: door.x + t, minZ: door.z - half, maxZ: door.z + half, h: DOOR_HEIGHT };
+}
+
 // Obstacles converted to the same rectangle format as walls.
 const obstacleBoxes = OBSTACLES.map((o) => ({
   minX: o.x - o.w / 2, maxX: o.x + o.w / 2,
@@ -283,6 +335,24 @@ export function visionBlockers(targetCrouching) {
 }
 export const VISION_BLOCKERS_STANDING = [...WALLS, ...obstacleBoxes.filter((b) => b.h >= EYE_HEIGHT.standing)];
 export const VISION_BLOCKERS_CROUCHED = [...WALLS, ...obstacleBoxes.filter((b) => b.h >= EYE_HEIGHT.crouching)];
+
+/**
+ * Collision / vision lists INCLUDING the doors that are currently closed.
+ * @param {Set<string>|string[]} closedDoorIds
+ */
+export function withClosedDoors(baseList, closedDoorIds) {
+  const closed = new Set(closedDoorIds);
+  if (closed.size === 0) return baseList;
+  return [...baseList, ...DOORS.filter((d) => closed.has(d.id)).map(doorBox)];
+}
+
+/** Where a thief stands to use a piece of furniture (in front of it). */
+export function frontOf(obstacleId, distance = 0.75) {
+  const o = OBSTACLES.find((ob) => ob.id === obstacleId);
+  const dir = { n: [0, -1], s: [0, 1], e: [1, 0], w: [-1, 0] }[o.face];
+  const half = o.face === 'n' || o.face === 's' ? o.d / 2 : o.w / 2;
+  return { x: o.x + dir[0] * (half + distance - 0.4), z: o.z + dir[1] * (half + distance - 0.4) };
+}
 
 // Find which room a floor point is in (returns the room object or null).
 export function roomAt(x, z) {

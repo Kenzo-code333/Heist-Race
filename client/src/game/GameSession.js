@@ -19,14 +19,15 @@
 // ============================================================================
 
 import * as THREE from 'three';
-import { stepMovement, facingFromDirection } from '../../../shared/movement.js';
-import { COLLIDERS, EXITS, SECURITY_CAMERAS, roomAt } from '../../../shared/map.js';
+import { stepMovement, facingFromDirection, restrictInput } from '../../../shared/movement.js';
+import { COLLIDERS, EXITS, SECURITY_CAMERAS, VISION_BLOCKERS_STANDING, withClosedDoors, roomAt } from '../../../shared/map.js';
+import { animateDoor } from './LevelBuilder.js';
 import { NoiseRipples } from './NoiseRipples.js';
 import { CameraView } from './CameraView.js';
 import { Sounds } from './Sounds.js';
 import { findInteraction } from '../../../shared/interactions.js';
 import { LootLayer } from './LootLayer.js';
-import { INPUT_DT, INTERPOLATION_DELAY, NOISE_RADIUS, NOISE_PULSE_INTERVAL } from '../../../shared/constants.js';
+import { INPUT_DT, INTERPOLATION_DELAY, NOISE_RADIUS, NOISE_PULSE_INTERVAL, GUARD, CAMERA, DARK_VISION_RANGE } from '../../../shared/constants.js';
 import { CharacterModel } from './CharacterModel.js';
 import { GuardView } from './GuardView.js';
 import { ThirdPersonCamera } from './ThirdPersonCamera.js';
@@ -39,12 +40,21 @@ function turnTowards(current, target, maxStep) {
   return current + Math.max(-maxStep, Math.min(maxStep, diff));
 }
 
+/** "Press E — Close the door" / "Hold E — Crack the safe" / labels that explain themselves. */
+function promptText(option) {
+  if (!option.kind || option.tapKind) return option.label;
+  return `${option.duration < 0.4 ? 'Press' : 'Hold'} — ${option.label}`;
+}
+
 export class GameSession {
   /**
-   * @param {object} deps - { renderer, network, input, hud, cameraBlockers }
+   * @param {object} deps - { renderer, network, input, hud, level }
+   *   level = handles returned by buildLevel(): cameraBlockers, props, doors, lights
    * @param {Array} roster - [{ id, name, color }] everyone in the match
    */
-  constructor({ renderer, network, input, hud, cameraBlockers }, roster) {
+  constructor({ renderer, network, input, hud, level }, roster) {
+    const { cameraBlockers } = level;
+    this.level = level;
     this.renderer = renderer;
     this.network = network;
     this.input = input;
@@ -74,6 +84,17 @@ export class GameSession {
     this.sounds = new Sounds();
     this.cameraViews = new Map(SECURITY_CAMERAS.map((def) => [def.id, new CameraView(renderer.scene, def)]));
 
+    // Live world state from the server (doors, safes, vault, closets, lights)
+    this.doorStates = {};   // door id -> { open, locked }
+    this.safeStates = {};   // safe id -> { progress, open }
+    this.vaultState = { stage: 0, progress: 0, open: false };
+    this.closets = {};      // closet id -> occupied?
+    this.darkRooms = new Set();
+    this.closedKey = '';
+    this.colliders = COLLIDERS; // walls + furniture + currently closed doors
+    this.visionBlockers = VISION_BLOCKERS_STANDING;
+    this.openAmounts = {};  // smoothed 0..1 opening of safes / vault
+
     // --- Everyone else (interpolated) ---
     this.others = new Map(); // id -> { model, tag, facing, lastX, lastZ, speed }
     this.guards = new Map(); // id -> GuardView
@@ -96,6 +117,12 @@ export class GameSession {
     this.ripples.dispose();
     for (const view of this.cameraViews.values()) view.dispose();
     this.sounds.setSiren(false);
+    // Put the building back as it was for the next match.
+    for (const view of Object.values(this.level.doors)) animateDoor(view, false, false, 100);
+    for (const room of Object.values(this.level.lights)) room.setDark(false);
+    for (const prop of Object.values(this.level.props)) {
+      if (prop.userData.setState) prop.userData.setState(0, 0, 0);
+    }
   }
 
   // ------------------------------------------------------------------ network
@@ -108,7 +135,30 @@ export class GameSession {
     this.alarm = snap.alarm ?? 0;
     this.police = snap.police ?? null;
     this.sounds.setSiren(this.police !== null);
-    for (const c of snap.cameras ?? []) this.cameraViews.get(c.id)?.update(c);
+
+    // World objects
+    for (const d of snap.doors ?? []) this.doorStates[d.id] = { open: d.o, locked: d.l };
+    for (const s of snap.safes ?? []) this.safeStates[s.id] = { progress: s.p, open: s.open };
+    if (snap.vault) this.vaultState = { stage: snap.vault.stage, progress: snap.vault.p, open: snap.vault.open };
+    this.closets = Object.fromEntries((snap.closets ?? []).map((c) => [c.id, c.occ]));
+    this.darkRooms = new Set(snap.dark ?? []);
+    for (const [roomId, control] of Object.entries(this.level.lights)) control.setDark(this.darkRooms.has(roomId));
+
+    // Closed doors block movement and sight: rebuild the lists when they change.
+    const closed = (snap.doors ?? []).filter((d) => !d.o).map((d) => d.id);
+    const key = closed.join(',');
+    if (key !== this.closedKey) {
+      this.closedKey = key;
+      this.colliders = withClosedDoors(COLLIDERS, closed);
+      this.visionBlockers = withClosedDoors(VISION_BLOCKERS_STANDING, closed);
+      for (const view of this.guards.values()) view.cone.blockers = this.visionBlockers;
+      for (const view of this.cameraViews.values()) view.cone.blockers = this.visionBlockers;
+    }
+
+    for (const c of snap.cameras ?? []) {
+      const view = this.cameraViews.get(c.id);
+      view?.update(c, this.isDark(view.def.x, view.def.z) ? 0 : CAMERA.range);
+    }
     this.lootList = snap.loot ?? [];
     for (const event of snap.events ?? []) this.handleEvent(event);
 
@@ -142,14 +192,18 @@ export class GameSession {
     if (event.type === 'escaped') this.hud.toast(`You escaped with $${event.banked}!`, 5);
   }
 
-  /** Apply the same restrictions the server applies (see Thief.modifyInput). */
+  isDark(x, z) {
+    const room = roomAt(x, z);
+    return !!room && this.darkRooms.has(room.id);
+  }
+
+  /** Apply the same restrictions the server applies (shared restrictInput). */
   restrictInput(inp) {
-    if (this.myState.koLeft > 0) return { ...inp, forward: false, back: false, left: false, right: false };
-    return inp;
+    return restrictInput(inp, { knockedOut: this.myState.koLeft > 0, hidden: !!this.myState.hiddenIn, items: this.myState.items });
   }
 
   applyLocalInput(inp) {
-    const result = stepMovement(this.me, this.restrictInput(inp), INPUT_DT, COLLIDERS);
+    const result = stepMovement(this.me, this.restrictInput(inp), INPUT_DT, this.colliders);
     this.me.x = result.x;
     this.me.z = result.z;
     return result;
@@ -197,6 +251,9 @@ export class GameSession {
     this.myModel.root.position.set(drawX, 0, drawZ);
     this.myModel.root.rotation.y = this.me.facing;
     const knockedOut = this.myState.koLeft > 0;
+    const hidden = !!this.myState.hiddenIn;
+    this.myModel.root.visible = !hidden;
+    this.myModel.setCarrying(this.myState.items.find((i) => i.type === 'painting')?.seed ?? 0, this.myState.items.filter((i) => i.type === 'gold').length);
     this.myModel.update(dt, this.me.speed, this.me.crouching, knockedOut);
     this.camera.update(dt, { x: drawX, z: drawZ }, this.me.crouching);
 
@@ -216,11 +273,17 @@ export class GameSession {
     }
     this.ripples.update(dt);
 
+    // World objects: doors swing, safes/vault animate
+    this.animateWorld(dt);
+
     // 4) Loot and the "E" prompt
-    const option = knockedOut ? null : findInteraction({ x: drawX, z: drawZ }, { loot: this.lootList, exits: EXITS });
+    const option = knockedOut ? null : findInteraction(
+      { x: drawX, z: drawZ, items: this.myState.items, hiddenIn: this.myState.hiddenIn, gadgets: this.myState.gadgets, speed: {} },
+      this.interactionWorld(),
+    );
     const act = this.myState.act;
     if (act) this.hud.setPrompt(act.label, act.p);
-    else this.hud.setPrompt(option?.label ?? null);
+    else this.hud.setPrompt(option ? promptText(option) : null);
     this.loot.sync(this.lootList, option?.kind === 'grab' ? option.targetId : null);
 
     // 5) HUD
@@ -229,9 +292,36 @@ export class GameSession {
     this.hud.setLoot(this.carriedValue(), this.myState.banked);
     this.hud.setRoom(roomAt(drawX, drawZ)?.name ?? '—');
     this.hud.setStance(this.me.moveMode, this.me.crouching);
-    this.hud.setCenter(knockedOut ? `KNOCKED OUT\n${Math.ceil(this.myState.koLeft)}` : '');
+    this.hud.setCenter(knockedOut ? `KNOCKED OUT\n${Math.ceil(this.myState.koLeft)}` : hidden ? 'HIDDEN' : '');
+    document.body.classList.toggle('hiding', hidden);
     const chased = sample?.newer.guards?.some((g) => g.me && g.s === 'chase');
     this.hud.setDanger(!!chased);
+  }
+
+  /** Everything findInteraction() needs, built from the latest snapshot. */
+  interactionWorld() {
+    return {
+      loot: this.lootList, exits: EXITS, doors: this.doorStates, safes: this.safeStates,
+      vault: this.vaultState, closets: this.closets, darkRooms: this.darkRooms,
+    };
+  }
+
+  /** Doors swing smoothly; safe and vault doors open; dials turn. */
+  animateWorld(dt) {
+    for (const [id, view] of Object.entries(this.level.doors)) {
+      const state = this.doorStates[id];
+      if (state) animateDoor(view, state.open, state.locked, dt);
+    }
+    const ease = (key, target) => {
+      const v = this.openAmounts[key] ?? 0;
+      this.openAmounts[key] = v + (target - v) * (1 - Math.exp(-dt * 2));
+      return this.openAmounts[key];
+    };
+    for (const [id, state] of Object.entries(this.safeStates)) {
+      this.level.props[id]?.userData.setState(state.progress, ease(id, state.open ? 1 : 0));
+    }
+    const v = this.vaultState;
+    this.level.props.vault?.userData.setState(v.stage, v.progress, ease('vault', v.open ? 1 : 0));
   }
 
   carriedValue() {
@@ -255,6 +345,7 @@ export class GameSession {
       this.updateGuards(dt, sample);
     }
     this.loot.sync(this.lootList, null);
+    this.animateWorld(dt);
     this.ripples.update(dt);
     this.hud.setAlarm(this.alarm, this.police);
     this.hud.setPrompt(null);
@@ -274,12 +365,10 @@ export class GameSession {
         this.guards.set(g.id, view);
       }
       const a = olderById.get(g.id) ?? g;
-      view.update({
-        ...g,
-        x: a.x + (g.x - a.x) * alpha,
-        z: a.z + (g.z - a.z) * alpha,
-        f: lerpAngle(a.f, g.f, alpha),
-      }, dt);
+      const x = a.x + (g.x - a.x) * alpha;
+      const z = a.z + (g.z - a.z) * alpha;
+      view.cone.blockers = this.visionBlockers;
+      view.update({ ...g, x, z, f: lerpAngle(a.f, g.f, alpha) }, dt, this.isDark(x, z) ? DARK_VISION_RANGE : GUARD.visionRange);
     }
   }
 
@@ -300,6 +389,7 @@ export class GameSession {
       other.facing = lerpAngle(a.f, p.f, alpha);
       other.model.root.position.set(x, 0, z);
       other.model.root.rotation.y = other.facing;
+      other.model.setCarrying(p.pt ?? 0, p.gold ?? 0);
       other.model.update(dt, other.speed, p.c, p.ko);
     }
 

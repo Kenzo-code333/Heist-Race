@@ -57,7 +57,22 @@ export const EYE_HEIGHT = { standing: 1.5, crouching: 0.9 };
 export const REACH = 1.5;            // how close you must be to interact (m)
 export const MATCH_DURATION = 8 * 60; // seconds; thieves still inside at the end lose their loot
 export const KNOCKOUT_DROP_SHARE = 0.5; // share of carried cash dropped when knocked out
-export const ACTION_TIME = { grabCash: 1.0, escape: 1.5 }; // seconds of holding E
+// Seconds of holding E for each action.
+export const ACTION_TIME = {
+  grabCash: 1.0, grabPainting: 2.5, grabGold: 1.5, escape: 1.5,
+  closeDoor: 0.15, lockDoor: 1.2, pickLock: 4, hide: 0.5, unhide: 0.3, lights: 1.0,
+};
+
+// Bulky loot has WEIGHT. Carrying any weight means you can't run.
+// You can carry at most MAX_CARRY_WEIGHT: one painting, or up to 3 gold bars.
+export const LOOT_WEIGHT = { cash: 0, painting: 3, gold: 1 };
+export const MAX_CARRY_WEIGHT = 3;
+
+// Noises made while doing things (radius in metres, every second while busy)
+export const ACTION_NOISE = { pickLock: 2, crack: 3, vault: 6, vaultStage: 12, lights: 4, door: 2.5 };
+export const ALARM_VAULT_STAGE = 6;   // + alarm per finished vault stage
+export const DARK_VISION_RANGE = 4;   // guards' flashlight range in a dark room (m)
+export const LIGHTS_FIX_DELAY = 20;   // seconds before a guard goes to turn the lights back on
 
 // --- Noise ---------------------------------------------------------------------
 // How far (m) a noise carries. Guards inside the radius come to investigate;

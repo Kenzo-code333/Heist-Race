@@ -38,6 +38,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #050506; col
 #hud-toast { position: absolute; left: 50%; top: 90px; transform: translateX(-50%); padding: 8px 18px; background: var(--panel); border-left: 3px solid var(--danger); font-size: 15px; opacity: 0; transition: opacity 0.3s; }
 #hud-toast.show { opacity: 1; }
 body.danger #hud::after { content: ""; position: absolute; inset: 0; box-shadow: inset 0 0 120px rgba(224, 83, 61, 0.45); animation: pulse 0.8s infinite alternate; }
+body.hiding #hud::after { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.85) 75%); }
 @keyframes pulse { from { opacity: 0.5; } to { opacity: 1; } }
 #hud-top-center { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); text-align: center; }
 #hud-timer { font-family: var(--mono); font-size: 22px; letter-spacing: 0.1em; padding: 4px 14px; background: var(--panel); }

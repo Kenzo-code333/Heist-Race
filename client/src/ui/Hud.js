@@ -122,7 +122,7 @@ export class Hud {
     if (!label) return;
     if (this.last.prompt !== label) {
       this.last.prompt = label;
-      this.promptLabel.textContent = progress === null ? `Hold — ${label}` : label;
+      this.promptLabel.textContent = label;
     }
     this.progressFill.style.width = `${Math.round((progress ?? 0) * 100)}%`;
   }

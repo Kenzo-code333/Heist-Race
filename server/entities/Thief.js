@@ -6,7 +6,8 @@
 // shared movement rules, and decides where the thief really is.
 // ============================================================================
 
-import { stepMovement, facingFromDirection } from '../../shared/movement.js';
+import { stepMovement, facingFromDirection, restrictInput } from '../../shared/movement.js';
+
 import { INPUT_DT, KNOCKOUT_TIME, KNOCKOUT_IMMUNITY } from '../../shared/constants.js';
 
 const MAX_QUEUED_INPUTS = 60;
@@ -38,6 +39,22 @@ export class Thief {
     this.noiseTimer = 0;       // time until the next footstep noise pulse
     this.interactHeld = false; // is the player holding E right now?
     this.action = null;        // { kind, targetId, duration, label, progress, startX, startZ }
+    this.hiddenIn = null;      // closet id while hiding
+    this.gadgets = [];         // chosen gadgets (Milestone 7)
+  }
+
+  /** What findInteraction() needs to know about this thief. */
+  actorView() {
+    return { x: this.x, z: this.z, items: this.items, hiddenIn: this.hiddenIn, gadgets: this.gadgets, speed: this.actionSpeeds() };
+  }
+
+  /** Speed multipliers for actions (gadgets make some faster in Milestone 7). */
+  actionSpeeds() {
+    return {};
+  }
+
+  actionSpeed(kind) {
+    return this.actionSpeeds()[kind] ?? 1;
   }
 
   /** Total value of everything carried. */
@@ -56,7 +73,7 @@ export class Thief {
 
   /** Can guards (and later cameras) notice this thief? */
   isTargetable(time) {
-    return !this.escaped && time >= this.immuneUntil;
+    return !this.escaped && !this.hiddenIn && time >= this.immuneUntil;
   }
 
   knockOut(time) {
@@ -104,8 +121,7 @@ export class Thief {
    * can't move (the input still counts, so the client stays in sync).
    */
   modifyInput(input) {
-    if (this.isKnockedOut(this.time)) return { ...input, forward: false, back: false, left: false, right: false };
-    return input;
+    return restrictInput(input, { knockedOut: this.isKnockedOut(this.time), hidden: !!this.hiddenIn, items: this.items });
   }
 
   applyInput(input, colliders) {
@@ -123,6 +139,9 @@ export class Thief {
     return {
       id: this.id, x: round(this.x), z: round(this.z), f: round(this.facing), m: this.moveMode, c: this.crouching,
       ko: this.isKnockedOut(this.time ?? 0),
+      // What they visibly carry: a painting on the back, gold bars in the bag
+      pt: this.items.find((i) => i.type === 'painting')?.seed ?? 0,
+      gold: this.items.filter((i) => i.type === 'gold').length,
     };
   }
 
@@ -138,9 +157,12 @@ export class Thief {
       items: this.items,
       banked: this.banked,
       escaped: this.escaped,
-      act: this.action && { kind: this.action.kind, label: this.action.label, p: Math.round((this.action.progress / this.action.duration) * 100) / 100 },
+      hiddenIn: this.hiddenIn,
+      gadgets: this.gadgets,
+      act: this.action && { kind: this.action.kind, label: this.action.label, p: Math.round((this.action.fraction ?? 0) * 100) / 100 },
     };
   }
 }
 
 const round = (v) => Math.round(v * 100) / 100;
+

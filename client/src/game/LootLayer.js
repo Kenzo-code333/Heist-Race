@@ -9,6 +9,10 @@
 import * as THREE from 'three';
 import { boxMesh, mesh, roundedBoxGeo } from './geometry.js';
 import { makeRng } from './textures.js';
+import { buildProp } from './props.js';
+
+// Which way wall-hung items face → rotation around y (props face +z by default).
+const FACE_ROTATION = { s: 0, e: Math.PI / 2, n: Math.PI, w: -Math.PI / 2 };
 
 // Banknote texture: drawn once, shared by every bundle.
 let billMaterial = null;
@@ -62,8 +66,34 @@ function droppedBag(seed) {
   return g;
 }
 
+/** A small stack of gold bars (trapezoid ingots). */
+export function goldBar() {
+  const g = new THREE.Group();
+  const geo = new THREE.CylinderGeometry(0.07, 0.09, 0.05, 4, 1);
+  geo.rotateY(Math.PI / 4);
+  geo.scale(1, 1, 0.55);
+  const bar = mesh(geo, 'gold', [0, 0.025, 0], g);
+  bar.scale.x = 1.6;
+  return g;
+}
+
 function buildItem(item, seed) {
   if (item.type === 'cash') return item.dropped ? droppedBag(seed) : cashStack(seed);
+  if (item.type === 'gold') return goldBar();
+  if (item.type === 'painting') {
+    const art = buildProp('painting', { w: item.w ?? 1.2, h: item.h ?? 1, seed: item.seed ?? 1 });
+    const holder = new THREE.Group();
+    if (item.dropped) {
+      // Lying face-up on the floor
+      art.rotation.x = -Math.PI / 2;
+      art.position.y = 0.03;
+    } else {
+      art.rotation.y = FACE_ROTATION[item.face] ?? 0;
+    }
+    holder.add(art);
+    holder.userData.wall = !item.dropped;
+    return holder;
+  }
   // Unknown types: a visible placeholder
   return boxMesh(0.2, 0.2, 0.2, 'gold', [0, 0.1, 0]);
 }
@@ -93,6 +123,7 @@ export class LootLayer {
       if (!this.views.has(item.id)) {
         const view = buildItem(item, hashString(item.id));
         view.position.set(item.x, item.y ?? 0, item.z);
+        view.userData.floorY = view.userData.wall ? 0 : item.y ?? 0;
         this.scene.add(view);
         this.views.set(item.id, view);
       }
@@ -106,7 +137,7 @@ export class LootLayer {
     const target = highlightId && this.views.get(highlightId);
     this.ring.visible = !!target;
     if (target) {
-      this.ring.position.set(target.position.x, target.position.y + 0.01, target.position.z);
+      this.ring.position.set(target.position.x, target.userData.floorY + 0.01, target.position.z);
       const pulse = 1 + Math.sin(performance.now() / 180) * 0.12;
       this.ring.scale.set(pulse, pulse, pulse);
     }

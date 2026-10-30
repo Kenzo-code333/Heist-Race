@@ -43,6 +43,8 @@ export class Guard {
     this.path = [];
     this.repathTimer = 0;
     this.moving = false;
+    this.doorsToClose = new Map(); // door id -> was it locked? (to re-lock it behind us)
+    this.fixLightsRoom = null;     // set when sent to turn a room's lights back on
   }
 
   // ------------------------------------------------------------- perception
@@ -91,7 +93,7 @@ export class Guard {
       case 'chase': this.updateChase(dt, seen, match); break;
       case 'search': this.updateSearch(dt); break;
       case 'return': this.updateReturn(dt); break;
-      case 'investigate': this.updateInvestigate(dt); break;
+      case 'investigate': this.updateInvestigate(dt, match); break;
       default: break;
     }
 
@@ -217,9 +219,13 @@ export class Guard {
   }
 
   // --- investigate: walk to a point of interest (used from Milestone 5) ---
-  updateInvestigate(dt) {
+  updateInvestigate(dt, match) {
     if (!this.investigateSpot) { this.setState('return'); return; }
     if (this.walkTo(this.investigateSpot.x, this.investigateSpot.z, GUARD.speed.investigate, dt)) {
+      if (this.fixLightsRoom) {
+        match.setLights(this.fixLightsRoom, true);
+        this.fixLightsRoom = null;
+      }
       this.lastSeen = this.investigateSpot;
       this.reachedSearchSpot = true;
       this.investigateSpot = null;
@@ -234,6 +240,7 @@ export class Guard {
    */
   hearNoise(x, z) {
     if (this.state === 'suspicious' || this.state === 'chase') return false;
+    if (this.fixLightsRoom && this.state === 'investigate') return false; // busy fixing the lights
     this.investigateSpot = { x, z };
     this.reachedSearchSpot = false;
     this.setState('investigate');
