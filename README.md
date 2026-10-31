@@ -7,6 +7,12 @@ Three.js + Vite on the client, Node.js + Socket.io (authoritative server) on the
 
 ## Run it
 
+**Windows, the easy way:** install Node.js (LTS) from https://nodejs.org, download this
+project (GitHub → Code → Download ZIP, then extract it), and double-click
+`start-windows.bat`. The game opens in your browser.
+
+**Any system, from a terminal:**
+
 ```bash
 npm install
 npm run dev

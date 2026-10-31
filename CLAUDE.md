@@ -46,6 +46,7 @@ npm install
 npm run dev        # server on :3000 + Vite client on :5173 → open http://localhost:5173
 ```
 
+- Windows: double-click `start-windows.bat` (installs dependencies on first run, opens the browser).
 - `npm run build && npm start` — production: the Node server serves `/dist` on :3000.
 - Graphics switches via URL: `?quality=low`, or individually `?ao=0`, `?bloom=0`, `?shadows=0`.
 - Server health check: http://localhost:3000/health
