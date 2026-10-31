@@ -1,0 +1,167 @@
+// ============================================================================
+// client/src/ui/Hud.js
+// ----------------------------------------------------------------------------
+// The HUD (heads-up display) is plain HTML laid over the 3D view (see
+// index.html + style.css). This class just updates its text and bars.
+// ============================================================================
+
+// What each movement mode shows: label and how many of the 3 noise bars light up.
+const STANCES = {
+  idle:   { label: 'STANDING', bars: 0 },
+  crouch: { label: 'CROUCHED', bars: 0 },
+  sneak:  { label: 'SNEAKING', bars: 0 },
+  walk:   { label: 'WALKING',  bars: 1 },
+  run:    { label: 'RUNNING',  bars: 3 },
+};
+
+export class Hud {
+  constructor() {
+    this.roomEl = document.getElementById('hud-room');
+    this.stanceEl = document.getElementById('hud-stance-label');
+    this.barsEl = document.getElementById('hud-stance-bars');
+    this.serverDot = document.getElementById('hud-server-dot');
+    this.serverText = document.getElementById('hud-server-text');
+    this.root = document.getElementById('hud');
+    this.centerEl = document.getElementById('hud-center');
+    this.toastEl = document.getElementById('hud-toast');
+    this.toastTimer = null;
+    this.timerEl = document.getElementById('hud-timer');
+    this.alarmFill = document.getElementById('hud-alarm-fill');
+    this.alarmLabel = document.getElementById('hud-alarm-label');
+    this.policeEl = document.getElementById('hud-police');
+    this.policeTime = document.getElementById('hud-police-time');
+    this.carriedEl = document.getElementById('hud-carried');
+    this.bankedEl = document.getElementById('hud-banked');
+    this.promptEl = document.getElementById('hud-prompt');
+    this.promptLabel = document.getElementById('hud-prompt-label');
+    this.progressFill = document.getElementById('hud-progress-fill');
+    this.gadgetsEl = document.getElementById('hud-gadgets');
+    this.feedEl = document.getElementById('hud-feed');
+    this.last = {}; // only touch the page when something changed (cheaper)
+  }
+
+  setRoom(name) {
+    if (this.last.room === name) return;
+    this.last.room = name;
+    this.roomEl.textContent = name;
+  }
+
+  /** @param {string} moveMode - idle | sneak | walk | run  @param {boolean} crouching */
+  setStance(moveMode, crouching) {
+    const key = moveMode === 'idle' && crouching ? 'crouch' : moveMode;
+    if (this.last.stance === key) return;
+    this.last.stance = key;
+    const stance = STANCES[key];
+    this.stanceEl.textContent = stance.label;
+    [...this.barsEl.children].forEach((bar, i) => bar.classList.toggle('on', i < stance.bars));
+    this.barsEl.classList.toggle('loud', stance.bars >= 3);
+  }
+
+  setServerStatus(online) {
+    this.serverDot.className = `dot ${online ? 'online' : 'offline'}`;
+    this.serverText.textContent = online ? 'Server: online' : 'Server: offline';
+  }
+
+  setVisible(visible) {
+    this.root.classList.toggle('hidden', !visible);
+    if (!visible) {
+      this.setDanger(false);
+      document.body.classList.remove('police');
+      this.last = {};
+    }
+  }
+
+  /** Big text in the middle of the screen ('' to clear). */
+  setCenter(text) {
+    if (this.last.center === text) return;
+    this.last.center = text;
+    this.centerEl.textContent = text;
+  }
+
+  /** A short message near the top that fades after a few seconds. */
+  toast(text, seconds = 3) {
+    this.toastEl.textContent = text;
+    this.toastEl.classList.add('show');
+    clearTimeout(this.toastTimer);
+    this.toastTimer = setTimeout(() => this.toastEl.classList.remove('show'), seconds * 1000);
+  }
+
+  /** Match clock, as m:ss. */
+  setTimer(secondsLeft) {
+    const text = `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`;
+    if (this.last.timer === text) return;
+    this.last.timer = text;
+    this.timerEl.textContent = text;
+    this.timerEl.classList.toggle('urgent', secondsLeft <= 60);
+  }
+
+  /** Shared alarm meter (0..100) and the police countdown (seconds or null). */
+  setAlarm(alarm, police) {
+    const key = `${alarm}|${police}`;
+    if (this.last.alarm === key) return;
+    this.last.alarm = key;
+    this.alarmFill.style.width = `${alarm}%`;
+    this.alarmLabel.textContent = `ALARM ${alarm}%`;
+    this.policeEl.classList.toggle('hidden', police === null);
+    if (police !== null) this.policeTime.textContent = police;
+    document.body.classList.toggle('police', police !== null);
+  }
+
+  setLoot(carried, banked) {
+    const key = `${carried}|${banked}`;
+    if (this.last.loot === key) return;
+    this.last.loot = key;
+    this.carriedEl.textContent = `$${carried.toLocaleString('en-US')}`;
+    this.bankedEl.textContent = banked > 0 ? `BANKED $${banked.toLocaleString('en-US')}` : '';
+  }
+
+  /**
+   * Show the "E" prompt. `progress` is 0..1 while holding, or null.
+   * Pass label = null to hide it.
+   */
+  setPrompt(label, progress = null) {
+    this.promptEl.classList.toggle('hidden', !label);
+    if (!label) return;
+    if (this.last.prompt !== label) {
+      this.last.prompt = label;
+      this.promptLabel.textContent = label;
+    }
+    this.progressFill.style.width = `${Math.round((progress ?? 0) * 100)}%`;
+  }
+
+  /** Gadget slots: [{ type, used }] with names from GADGETS. */
+  setGadgets(gadgets, catalogue) {
+    const key = JSON.stringify(gadgets);
+    if (this.last.gadgets === key) return;
+    this.last.gadgets = key;
+    this.gadgetsEl.innerHTML = '';
+    gadgets.forEach((g, i) => {
+      const info = catalogue[g.type];
+      const el = document.createElement('div');
+      el.className = `gadget${g.used ? ' used' : ''}${info.active ? '' : ' passive'}`;
+      const keyEl = document.createElement('span');
+      keyEl.className = 'key';
+      keyEl.textContent = info.active ? `${i + 1}` : '•';
+      el.append(keyEl, document.createTextNode(info.active ? info.name : `${info.name} (passive)`));
+      this.gadgetsEl.appendChild(el);
+    });
+  }
+
+  /** A line in the chat feed (fades out after a few seconds). */
+  feed(text, color = null) {
+    const line = document.createElement('div');
+    line.className = 'feed-line';
+    if (color !== null) line.style.borderLeft = `3px solid #${color.toString(16).padStart(6, '0')}`;
+    line.textContent = text;
+    this.feedEl.appendChild(line);
+    while (this.feedEl.children.length > 5) this.feedEl.firstChild.remove();
+    setTimeout(() => line.remove(), 6000);
+  }
+
+  /** Red pulsing screen edges while a guard is chasing you. */
+  setDanger(on) {
+    if (this.last.danger === on) return;
+    this.last.danger = on;
+    document.body.classList.toggle('danger', on);
+  }
+}

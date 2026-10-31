@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Heist Race</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <!-- The 3D view is drawn into this element -->
+    <div id="game"></div>
+
+    <!-- HUD: always-visible information drawn on top of the 3D view (in a match) -->
+    <div id="hud" class="hidden">
+      <div id="hud-top-left">
+        <div class="hud-title">HEIST RACE</div>
+        <div id="hud-room">—</div>
+      </div>
+      <div id="hud-top-center">
+        <div id="hud-timer">8:00</div>
+        <div id="hud-alarm"><div id="hud-alarm-fill"></div><span id="hud-alarm-label">ALARM 0%</span></div>
+        <div id="hud-police" class="hidden">POLICE ARRIVING — <span id="hud-police-time">60</span>s</div>
+      </div>
+      <div id="hud-bottom-right">
+        <div class="hud-small">CARRYING</div>
+        <div id="hud-carried">$0</div>
+        <div class="hud-small" id="hud-banked"></div>
+      </div>
+      <div id="hud-prompt" class="hidden">
+        <span class="key">E</span><span id="hud-prompt-label"></span>
+        <div id="hud-progress"><div id="hud-progress-fill"></div></div>
+      </div>
+      <div id="hud-top-right">
+        <span id="hud-server-dot" class="dot"></span>
+        <span id="hud-server-text">Server: connecting…</span>
+      </div>
+      <div id="hud-bottom-left">
+        <div id="hud-stance-label">STANDING</div>
+        <div id="hud-stance-bars"><span></span><span></span><span></span></div>
+        <div id="hud-stance-hint">Noise level</div>
+      </div>
+      <div id="hud-crosshair"></div>
+      <div id="hud-gadgets"></div>
+      <div id="hud-feed"></div>
+      <div id="hud-hints">TAB blueprint · Q chat wheel · 1 / 2 gadgets</div>
+      <div id="hud-center"></div>
+      <div id="hud-toast"></div>
+    </div>
+
+    <!-- Full-screen panels. Only one is visible at a time. -->
+    <div id="overlay">
+      <!-- 1) Main menu: pick a name, create or join a room -->
+      <div class="overlay-card screen" id="screen-menu">
+        <h1>HEIST RACE</h1>
+        <p class="subtitle">Rival thieves. One building. Only what you carry out counts.</p>
+        <label class="field">Your thief name
+          <input id="menu-name" maxlength="16" placeholder="e.g. Lupin" autocomplete="off" />
+        </label>
+        <button id="menu-create" class="primary">Create a room</button>
+        <div class="divider"><span>or join a friend</span></div>
+        <div class="row">
+          <input id="menu-code" maxlength="4" placeholder="CODE" autocomplete="off" />
+          <button id="menu-join">Join</button>
+        </div>
+        <p id="menu-error" class="error"></p>
+        <p id="loading-text">Building the vault…</p>
+      </div>
+
+      <!-- 2) Lobby: share the code, wait for the host to start -->
+      <div class="overlay-card screen hidden" id="screen-lobby">
+        <p class="subtitle">Room code</p>
+        <div id="lobby-code" class="room-code">----</div>
+        <div class="row">
+          <input id="lobby-link" readonly />
+          <button id="lobby-copy">Copy link</button>
+        </div>
+        <ul id="lobby-players"></ul>
+        <button id="lobby-start" class="primary">Start the heist</button>
+        <p id="lobby-wait" class="subtitle">Waiting for the host to start…</p>
+        <button id="lobby-leave" class="link">Leave room</button>
+      </div>
+
+      <!-- 3) Pause: shown in a match whenever the mouse is not captured -->
+      <div class="overlay-card screen hidden" id="screen-pause">
+        <h1>HEIST RACE</h1>
+        <p class="subtitle" id="pause-subtitle">The heist goes on without you!</p>
+        <button id="pause-resume" class="primary">Click to play</button>
+        <table class="controls">
+          <tr><td>W A S D</td><td>Move (Z Q S D on AZERTY)</td></tr>
+          <tr><td>Mouse</td><td>Look around</td></tr>
+          <tr><td>Shift (hold)</td><td>Run — loud</td></tr>
+          <tr><td>C</td><td>Toggle crouch-sneak — silent (walking is quiet, running is loud)</td></tr>
+          <tr><td>E (hold)</td><td>Grab loot, crack safes, drill the vault, pick locks, cut lights, escape</td></tr>
+          <tr><td>E (tap)</td><td>Open / close doors, hide in closets</td></tr>
+          <tr><td>1 / 2</td><td>Use gadget</td></tr>
+          <tr><td>Tab</td><td>Blueprint tablet (keep moving while it's open)</td></tr>
+          <tr><td>Q (hold)</td><td>Chat wheel (A on AZERTY): point with the mouse, release</td></tr>
+          <tr><td>Esc</td><td>Release the mouse</td></tr>
+        </table>
+      </div>
+
+      <!-- 4) Planning: secret choice of entry point and gadgets -->
+      <div class="overlay-card screen hidden wide" id="screen-planning">
+        <div class="plan-header">
+          <h1>PLAN THE HEIST</h1>
+          <div id="plan-timer">60</div>
+        </div>
+        <p class="subtitle">Your choices are secret. Rivals only see that you are ready.</p>
+        <div class="plan-body">
+          <canvas id="plan-map" width="600" height="420"></canvas>
+          <div class="plan-side">
+            <div class="plan-title">ENTRY POINT</div>
+            <div id="plan-entries"></div>
+            <div class="plan-title">GADGETS <span id="plan-gadget-count">(pick 2)</span></div>
+            <div id="plan-gadgets"></div>
+            <button id="plan-ready" class="primary">I'm ready</button>
+            <p id="plan-status" class="subtitle"></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5) Scoreboard at the end of a match -->
+      <div class="overlay-card screen hidden" id="screen-scoreboard">
+        <h1>HEIST OVER</h1>
+        <p class="subtitle" id="score-winner"></p>
+        <table id="score-table"></table>
+        <button id="score-lobby" class="primary">Back to the lobby</button>
+        <p id="score-wait" class="subtitle">Waiting for the host…</p>
+      </div>
+    </div>
+
+    <!-- Blueprint tablet (Tab). Doesn't capture the mouse: you keep moving. -->
+    <div id="tablet" class="hidden">
+      <div class="tablet-frame">
+        <div class="tablet-head">BLUEPRINT · <span>explored</span> <span class="dim">remembered</span> <span class="dark">unknown</span></div>
+        <canvas id="tablet-map" width="900" height="600"></canvas>
+      </div>
+    </div>
+
+    <!-- Emote / chat wheel (hold Q, move the mouse, release) -->
+    <div id="wheel" class="hidden"></div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
