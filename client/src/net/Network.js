@@ -10,15 +10,15 @@
 // Some requests expect an answer ("acknowledgement"); we wrap those in
 // Promises so the caller can write: const result = await network.createRoom(name)
 // (a Promise is like a Python awaitable / future).
+//
+// The connection itself is passed in by main.js: a real Socket.io connection
+// online, or the in-browser stand-in (LocalSocket.js) for the offline preview.
 // ============================================================================
 
-import { io } from 'socket.io-client';
-
 export class Network {
-  constructor() {
-    // No URL = connect to the same address the page came from. In development
-    // Vite forwards /socket.io to the Node server (see vite.config.js).
-    this.socket = io();
+  /** @param {object} socket - Socket.io client socket (or the local stand-in) */
+  constructor(socket) {
+    this.socket = socket;
   }
 
   get id() {

@@ -15,6 +15,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { SERVER_PORT } from '../shared/constants.js';
 import { RoomManager } from './RoomManager.js';
+import { handleConnection } from './handlers.js';
 
 const app = express();
 const httpServer = createServer(app);   // plain HTTP server; Socket.io attaches to it
@@ -36,43 +37,8 @@ app.get('/health', (req, res) => res.json({ ok: true }));
 
 const rooms = new RoomManager(io);
 
-// Called every time a browser tab connects. `socket` is that tab's connection.
-io.on('connection', (socket) => {
-  let room = null; // the room this tab is in (null = main menu)
-
-  // Wrap ack callbacks: clients may forget to pass one.
-  const reply = (ack, data) => typeof ack === 'function' && ack(data);
-  const leaveCurrent = () => { room?.removePlayer(socket.id); room = null; };
-
-  socket.on('room:create', (msg, ack) => {
-    leaveCurrent();
-    room = rooms.createRoom();
-    reply(ack, room.addPlayer(socket, msg?.name));
-  });
-
-  socket.on('room:join', (msg, ack) => {
-    leaveCurrent();
-    const target = rooms.getRoom(msg?.code);
-    if (!target) return reply(ack, { ok: false, error: 'No room with that code.' });
-    const result = target.addPlayer(socket, msg?.name);
-    if (result.ok) room = target;
-    reply(ack, result);
-  });
-
-  socket.on('room:leave', leaveCurrent);
-  socket.on('room:start', () => room?.start(socket.id));
-  socket.on('room:lobby', () => room?.backToLobby(socket.id));
-  socket.on('interact', (msg) => room?.handleInteract(socket.id, msg?.down));
-  socket.on('plan:choose', (msg) => room?.choosePlan(socket.id, msg));
-  socket.on('plan:ready', () => room?.setReady(socket.id));
-  socket.on('gadget', (msg) => room?.handleGadget(socket.id, msg));
-  socket.on('emote', (msg) => room?.handleEmote(socket.id, msg));
-  socket.on('inputs', (list) => {
-    if (!Array.isArray(list)) return;
-    for (const input of list.slice(0, 10)) room?.handleInput(socket.id, input);
-  });
-  socket.on('disconnect', leaveCurrent);
-});
+// Every browser tab that connects gets the standard message handlers.
+io.on('connection', (socket) => handleConnection(socket, rooms));
 
 const port = process.env.PORT || SERVER_PORT;
 httpServer.listen(port, () => {

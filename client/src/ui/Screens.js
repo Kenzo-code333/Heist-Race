@@ -11,8 +11,9 @@ const $ = (id) => document.getElementById(id);
 export class Screens {
   /**
    * @param {object} handlers - { onCreate(name), onJoin(code, name), onStart(), onLeave(), onResume() }
+   * @param {object} [options] - { offline: true } for the single-player preview build
    */
-  constructor(handlers) {
+  constructor(handlers, { offline = false } = {}) {
     this.overlay = $('overlay');
     this.screens = {
       menu: $('screen-menu'),
@@ -44,6 +45,15 @@ export class Screens {
     if (code) {
       $('menu-code').value = code.toUpperCase();
       $('menu-join').textContent = `Join ${code.toUpperCase()}`;
+    }
+    // Offline preview: nobody can join, so hide the join box and the share link.
+    if (offline) {
+      document.querySelector('#screen-menu .divider').classList.add('hidden');
+      $('menu-code').parentElement.classList.add('hidden');
+      $('lobby-link').parentElement.classList.add('hidden');
+      document.querySelector('#screen-menu .subtitle').textContent =
+        'Preview: single player against the guards. Multiplayer needs the online version.';
+      $('menu-create').textContent = 'Start a heist';
     }
     this.setBusy(true);
   }

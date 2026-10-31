@@ -48,6 +48,9 @@ npm run dev        # server on :3000 + Vite client on :5173 → open http://loca
 
 - Windows: double-click `start-windows.bat` (installs dependencies on first run, opens the browser).
 - `npm run build && npm start` — production: the Node server serves `/dist` on :3000 (or `$PORT`).
+- **Offline preview** (single player, runs in Claude as an Artifact): `npm run build:preview` →
+  `dist-preview/heist-race.html`. Vite mode `offline` bundles `server/` into the page and
+  `client/src/net/LocalSocket.js` stands in for Socket.io. Artifact: https://claude.ai/artifact/8H8ZtixCxuyqtZLMUwsVgm
 - Online hosting: `render.yaml` (Render Blueprint, free plan, health check `/health`). Socket.io
   `pingTimeout` is 60 s to survive slow level builds and network hiccups.
 - Graphics switches via URL: `?quality=low`, or individually `?ao=0`, `?bloom=0`, `?shadows=0`.
@@ -71,7 +74,8 @@ shared/                 used by BOTH sides
   movement.js           stepMovement(state, input, dt, colliders) — pure function, sub-stepped;
                         restrictInput() (knocked out / hidden / heavy loot) used by both sides
 server/
-  index.js              Express + Socket.io event wiring (+ /health)
+  index.js              Express + Socket.io setup (+ /health)
+  handlers.js           per-connection message handlers (shared with the offline preview)
   RoomManager.js        rooms by 4-letter code, one shared tick loop (TICK_RATE)
   Room.js               lobby → planning → playing → ended, host, roster, secret plans, emotes,
                         sends per-player snapshots
@@ -106,14 +110,15 @@ client/
     SnapshotBuffer.js   snapshot history + sampling at now - INTERPOLATION_DELAY
     NameTag.js          canvas sprite labels
     LootLayer.js        loot models synced with the snapshot + highlight ring
-  src/input/Input.js    keyboard (event.code → AZERTY-safe) + pointer-lock mouse
+  src/input/Input.js    keyboard (event.code → AZERTY-safe) + pointer-lock mouse (drag-look fallback)
   src/ui/Hud.js         room name, stance/noise bars, server status
   src/ui/Screens.js     menu / lobby / pause / scoreboard panels (+ planning panel element)
   src/ui/Planning.js    planning screen: blueprint with partial info, entry + gadget picks, ready
   src/ui/Blueprint.js   BlueprintPainter: 2D map drawing on a canvas (planning + tablet)
   src/ui/Tablet.js      in-game blueprint tablet (fog, memories, live entities, noise rings)
   src/ui/EmoteWheel.js  hold-Q chat wheel
-  src/net/Network.js    Socket.io client wrapper (requests with acks as Promises)
+  src/net/Network.js    client wrapper around a socket (requests with acks as Promises)
+  src/net/LocalSocket.js offline preview: Socket.io stand-in + the real server code in the page
 
 ### Network protocol (Socket.io events)
 

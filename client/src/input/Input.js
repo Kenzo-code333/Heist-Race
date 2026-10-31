@@ -26,6 +26,8 @@ export class Input {
     this.onTablet = () => {};     // Tab pressed
     this.onWheel = () => {};      // Q pressed (true) / released (false)
     this.onGadget = () => {};     // 1 or 2 pressed (slot 0 or 1)
+    this.onDragLook = () => {};   // pointer lock refused: switched to drag-look
+    this.dragLook = false;
     this.interactDown = false;
 
     window.addEventListener('keydown', (e) => this.onKeyDown(e));
@@ -37,25 +39,57 @@ export class Input {
     window.addEventListener('blur', () => { this.keys.clear(); this.setInteract(false); }); // tab switched: release everything
     document.addEventListener('mousemove', (e) => {
       if (!this.locked) return;
+      // Drag-look mode (no pointer lock): only look while the left button is held.
+      if (this.dragLook && !(e.buttons & 1)) return;
       this.mouseDX += e.movementX;
       this.mouseDY += e.movementY;
     });
     document.addEventListener('pointerlockchange', () => {
       this.locked = document.pointerLockElement === this.lockElement;
+      if (this.locked) this.dragLook = false; // real mouse capture works after all
       if (!this.locked) { this.keys.clear(); this.setInteract(false); }
       this.onLockChange(this.locked);
     });
   }
 
-  /** Ask the browser to capture the mouse (must be called from a click). */
-  requestLock() {
-    this.lockElement.requestPointerLock();
+  /**
+   * Ask the browser to capture the mouse. Browsers only allow it right after
+   * a click. Some embedded pages (like a preview inside Claude) refuse it even
+   * then: in that case, after a real click, we switch to "drag-look": hold the
+   * left mouse button and drag to look around.
+   * @param {boolean} fromClick - true when called from a button click
+   */
+  requestLock(fromClick = false) {
+    const refused = () => { if (fromClick) this.startDragLook(); };
+    try {
+      const result = this.lockElement.requestPointerLock();
+      if (result && typeof result.catch === 'function') result.catch(refused); // newer browsers return a Promise
+    } catch {
+      refused();
+    }
+    if (fromClick) document.addEventListener('pointerlockerror', refused, { once: true });
+  }
+
+  startDragLook() {
+    if (this.dragLook && this.locked) return;
+    this.dragLook = true;
+    this.locked = true;
+    this.onDragLook();
+    this.onLockChange(true);
   }
 
   onKeyDown(e) {
     // Tab normally moves focus between page elements; here it opens the tablet.
     if (e.code === 'Tab') e.preventDefault();
     if (!this.locked) return;
+    // In drag-look mode there is no browser "Esc releases the mouse": do it ourselves.
+    if (e.code === 'Escape' && this.dragLook) {
+      this.locked = false;
+      this.keys.clear();
+      this.setInteract(false);
+      this.onLockChange(false);
+      return;
+    }
     if (e.code === 'Tab' && !e.repeat) this.onTablet();
     if (e.code === 'KeyQ' && !e.repeat) { this.wheelDown = true; this.onWheel(true); }
     if ((e.code === 'Digit1' || e.code === 'Digit2') && !e.repeat) this.onGadget(e.code === 'Digit1' ? 0 : 1);

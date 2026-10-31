@@ -41,6 +41,11 @@ To try multiplayer alone, open the link in a second browser tab or window.
 
 If it runs slowly: http://localhost:5173/?quality=low
 
+## Single-player preview file
+
+`npm run build:preview` creates `dist-preview/heist-race.html`: one file with the whole game
+(server included) that runs with no installation. Single player only.
+
 ## Put it online (free, with Render)
 
 1. Create an account at https://render.com (sign in with GitHub).

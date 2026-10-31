@@ -17,11 +17,28 @@ import { Input } from './input/Input.js';
 import { Hud } from './ui/Hud.js';
 import { Screens } from './ui/Screens.js';
 import { Network } from './net/Network.js';
+
+// OFFLINE = the single-file preview build (`npm run build:preview`): the game
+// server runs inside the page and there is no multiplayer. Decided at build time.
+const OFFLINE = import.meta.env.MODE === 'offline';
 import { Planning } from './ui/Planning.js';
 
 const hud = new Hud();
 const renderer = new Renderer(document.getElementById('game'));
-const network = new Network();
+const network = new Network(OFFLINE ? await connectLocally() : await connectToServer());
+
+// Online: a real Socket.io connection. No URL = the same address the page came
+// from (in development Vite forwards /socket.io to the Node server).
+async function connectToServer() {
+  const { io } = await import('socket.io-client');
+  return io();
+}
+
+// Offline preview: start the game server inside this page.
+async function connectLocally() {
+  const { createLocalSocket } = await import('./net/LocalSocket.js');
+  return createLocalSocket();
+}
 const input = new Input(renderer.renderer.domElement);
 
 let level = null;        // handles from buildLevel(): camera blockers, doors, props, lights
@@ -54,18 +71,18 @@ const screens = new Screens({
     screens.show('menu');
   },
   onResume() {
-    input.requestLock();
+    input.requestLock(true);
   },
   onBackToLobby() {
     network.backToLobby();
   },
-});
+}, { offline: OFFLINE });
 
 function handleJoinResult(result) {
   if (!result?.ok) return screens.showError(result?.error ?? 'Something went wrong.');
   screens.showError('');
   // Put the room code in the address bar so a refresh / copy-paste keeps it.
-  history.replaceState(null, '', `?room=${result.code}`);
+  try { history.replaceState(null, '', `?room=${result.code}`); } catch { /* not allowed in some embedded frames */ }
   screens.show('lobby');
 }
 
@@ -118,6 +135,8 @@ function endSession() {
 }
 
 // Mouse captured = playing; released = show the pause screen (match only).
+input.onDragLook = () => hud.toast('Hold the left mouse button and drag to look around. Esc pauses.', 6);
+
 input.onLockChange = (locked) => {
   if (session) screens.show(locked ? null : 'pause');
 };
