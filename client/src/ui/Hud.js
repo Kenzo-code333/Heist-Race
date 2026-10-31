@@ -58,6 +58,8 @@ export class Hud {
   }
 
   setServerStatus(online) {
+    if (this.serverOnline === online) return; // called every frame: only touch the page on change
+    this.serverOnline = online;
     this.serverDot.className = `dot ${online ? 'online' : 'offline'}`;
     this.serverText.textContent = online ? 'Server: online' : 'Server: offline';
   }

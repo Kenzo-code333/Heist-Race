@@ -18,7 +18,10 @@ import { RoomManager } from './RoomManager.js';
 
 const app = express();
 const httpServer = createServer(app);   // plain HTTP server; Socket.io attaches to it
-const io = new Server(httpServer);
+// pingTimeout: how long the server waits for a silent player before deciding
+// they left. 60 s tolerates slow computers (building the level freezes the
+// page for a moment) and short internet hiccups.
+const io = new Server(httpServer, { pingTimeout: 60000 });
 
 // In production, serve the files produced by `vite build` (the /dist folder).
 // In development Vite serves the client itself, on port 5173.

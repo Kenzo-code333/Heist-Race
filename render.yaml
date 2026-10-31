@@ -1,0 +1,13 @@
+# Render.com "Blueprint": tells Render how to build and run Heist Race.
+# On render.com: New + -> Blueprint -> pick this GitHub repository.
+services:
+  - type: web
+    name: heist-race
+    runtime: node
+    plan: free
+    # Install everything (Vite is a dev tool but is needed to build the client),
+    # then bundle the client into /dist.
+    buildCommand: npm install --include=dev && npm run build
+    # The Node server serves /dist and runs the game (Render sets PORT).
+    startCommand: npm start
+    healthCheckPath: /health

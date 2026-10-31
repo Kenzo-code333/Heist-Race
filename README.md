@@ -41,4 +41,14 @@ To try multiplayer alone, open the link in a second browser tab or window.
 
 If it runs slowly: http://localhost:5173/?quality=low
 
+## Put it online (free, with Render)
+
+1. Create an account at https://render.com (sign in with GitHub).
+2. Click **New +** → **Blueprint**, pick this repository and the branch with the game.
+3. Click **Apply**. After a few minutes Render shows a web address like
+   `https://heist-race.onrender.com` — share it (or a room link) with your friends.
+
+The free plan falls asleep after 15 minutes without players; the first visit then
+takes about a minute to wake it up.
+
 See [CLAUDE.md](CLAUDE.md) for the architecture.

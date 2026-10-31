@@ -154,6 +154,7 @@ function loop(now) {
   lastTime = now;
   if (session) session.update(dt);
   else idleCamera(now);
+  hud.setServerStatus(network.socket.connected); // always show the true connection state
   renderer.render();
   requestAnimationFrame(loop);
 }
