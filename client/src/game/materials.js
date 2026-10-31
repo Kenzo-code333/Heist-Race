@@ -21,6 +21,36 @@ import * as T from './textures.js';
 
 const cache = new Map();
 
+// ---------------------------------------------------------------------------
+// CARTOON ("toon") SHADING. Instead of smooth realistic lighting, toon
+// materials light surfaces in a few flat bands, like a comic or a cartoon.
+// It is cheaper for the graphics card AND it makes simple shapes look
+// deliberate instead of "blocky". The gradient map defines the bands:
+// 4 brightness steps from shadow to fully lit.
+// ---------------------------------------------------------------------------
+const TOON_STEPS = (() => {
+  const steps = new Uint8Array([105, 165, 215, 255]);
+  const tex = new THREE.DataTexture(steps, steps.length, 1, THREE.RedFormat);
+  tex.minFilter = tex.magFilter = THREE.NearestFilter; // hard edges between bands
+  tex.needsUpdate = true;
+  return tex;
+})();
+
+/**
+ * Turn a realistic material into a toon one with the same colour and textures.
+ * See-through (glass) and unlit materials are kept as they are.
+ */
+function toonify(m) {
+  if (m.transparent || m.isMeshBasicMaterial || m.isMeshToonMaterial) return m;
+  const toon = new THREE.MeshToonMaterial({
+    color: m.color, map: m.map, bumpMap: m.bumpMap, bumpScale: m.bumpScale,
+    emissive: m.emissive, emissiveIntensity: m.emissiveIntensity, emissiveMap: m.emissiveMap,
+    side: m.side, gradientMap: TOON_STEPS,
+  });
+  m.dispose();
+  return toon;
+}
+
 // Helper: apply real-world scale to a generated {color, height} texture pair.
 function scaled(pair, tileMetres) {
   for (const tex of [pair.color, pair.height]) tex.repeat.set(1 / tileMetres, 1 / tileMetres);
@@ -147,12 +177,14 @@ export function getMaterial(name) {
   if (!cache.has(name)) {
     const factory = FACTORIES[name];
     if (!factory) throw new Error(`Unknown material: ${name}`);
-    cache.set(name, factory());
+    cache.set(name, toonify(factory()));
   }
   return cache.get(name);
 }
 
 /** A one-off material with a specific colour (not cached), e.g. book covers. */
 export function colorMaterial(color, roughness = 0.6, metalness = 0) {
-  return new THREE.MeshStandardMaterial({ color, roughness, metalness });
+  return toonify(new THREE.MeshStandardMaterial({ color, roughness, metalness }));
 }
+
+export { toonify };

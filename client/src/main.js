@@ -13,6 +13,7 @@
 import { Renderer } from './game/Renderer.js';
 import { buildLevel } from './game/LevelBuilder.js';
 import { GameSession } from './game/GameSession.js';
+import { loadCharacterAssets } from './game/CharacterModel.js';
 import { Input } from './input/Input.js';
 import { Hud } from './ui/Hud.js';
 import { Screens } from './ui/Screens.js';
@@ -146,8 +147,9 @@ input.onLockChange = (locked) => {
 // one frame first so the "Building the vault…" text can appear on screen.
 requestAnimationFrame(() => setTimeout(start, 0));
 
-function start() {
+async function start() {
   level = buildLevel(renderer.scene);
+  await loadCharacterAssets(); // the Kenney character model, used by thieves and guards
   renderer.renderer.compile(renderer.scene, renderer.camera); // pre-compile shaders: no stutter later
   screens.setBusy(false);
   screens.show('menu');

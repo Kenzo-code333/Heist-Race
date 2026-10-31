@@ -14,7 +14,7 @@
 import * as THREE from 'three';
 import { WALL_HEIGHT } from '../../../shared/constants.js';
 
-const DISTANCE = 3.4;          // ideal distance behind the thief (m)
+const DISTANCE = 4.0;          // ideal distance behind the thief (m)
 const SHOULDER_OFFSET = 0.45;  // shift to the right, for an over-the-shoulder view
 const HEAD_HEIGHT = 1.55;      // camera aims at this height when standing
 const CROUCH_HEAD_HEIGHT = 1.05;

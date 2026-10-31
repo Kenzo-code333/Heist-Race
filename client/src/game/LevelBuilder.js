@@ -14,7 +14,7 @@
 import * as THREE from 'three';
 import { ROOMS, WALLS, DOORWAYS, DOORS, OBSTACLES, DECOR, EXITS, LIGHT_SWITCHES, roomAt } from '../../../shared/map.js';
 import { WALL_HEIGHT, WALL_THICKNESS, DOOR_HEIGHT } from '../../../shared/constants.js';
-import { boxGeo, boxMesh, mesh, floorPlane } from './geometry.js';
+import { boxGeo, boxMesh, mesh, floorPlane, mergeStaticMeshes } from './geometry.js';
 import { getMaterial } from './materials.js';
 import { buildProp } from './props.js';
 
@@ -31,17 +31,26 @@ export function buildLevel(scene) {
   level.name = 'level';
   const cameraBlockers = [];
 
+  // Things that move or change during a match (doors, safes, the vault, light
+  // switches) go in a separate group; everything else is merged (see below).
+  const moving = new THREE.Group();
+  moving.name = 'moving-parts';
+
   buildFloorsAndCeilings(level);
   buildWalls(level, cameraBlockers);
   buildDoorways(level, cameraBlockers);
   const lights = buildLights(level);
-  const props = buildObstacles(level, cameraBlockers);
+  const props = buildObstacles(level, cameraBlockers, moving);
   buildDecor(level);
   buildExits(level);
-  const doors = buildDoors(level);
-  buildLightSwitches(level, lights);
+  const doors = buildDoors(moving);
+  buildLightSwitches(moving, lights);
 
-  scene.add(level);
+  // PERFORMANCE: the building is made of thousands of small pieces. Drawing
+  // each one separately is slow, so all still pieces sharing a material are
+  // fused into one big mesh: thousands of draw calls become a few dozen.
+  const merged = mergeStaticMeshes(level);
+  scene.add(merged, moving);
   return { cameraBlockers, props, doors, lights };
 }
 
@@ -167,48 +176,28 @@ function buildDoorways(level, cameraBlockers) {
   }
 }
 
-// One ceiling light fixture + a real light source per entry in room.lights.
-// Only the FIRST light in each room casts shadows (shadows are expensive).
+// Each room: glowing ceiling panels (just bright shapes, no real light) plus ONE
+// soft lamp that lights the room. Few lights + no shadow maps = fast.
 // Returns { roomId: { setDark(bool) } } so the game can cut the lights.
 function buildLights(level) {
   const control = {};
   for (const room of ROOMS) {
-    const spots = [];
     // Each room gets its own copy of the glowing panel material, so its
     // panels can be switched off without affecting other rooms.
     const panelMaterial = getMaterial('lightPanel').clone();
-    room.lights.forEach(([x, z], index) => {
-      // Visible fixture: a recessed glowing panel with a metal rim.
-      boxMesh(0.66, 0.03, 0.66, 'brushedSteel', [x, WALL_HEIGHT - 0.01, z], level).castShadow = false;
-      const panel = boxMesh(0.6, 0.02, 0.6, panelMaterial, [x, WALL_HEIGHT - 0.025, z], level);
-      panel.castShadow = false;
+    for (const [x, z] of room.lights) {
+      boxMesh(0.66, 0.03, 0.66, 'brushedSteel', [x, WALL_HEIGHT - 0.01, z], level);
+      boxMesh(0.6, 0.02, 0.6, panelMaterial, [x, WALL_HEIGHT - 0.025, z], level);
+    }
 
-      // The light itself: a spotlight pointing straight down with soft edges.
-      const light = new THREE.SpotLight(room.mood.color, 45 * room.mood.intensity);
-      light.position.set(x, WALL_HEIGHT - 0.05, z);
-      light.target.position.set(x, 0, z);
-      light.angle = Math.PI / 3;
-      light.penumbra = 0.9;
-      light.decay = 2;
-      if (index === 0) {
-        light.castShadow = true;
-        light.shadow.mapSize.set(1024, 1024);
-        light.shadow.bias = -0.0004;
-        light.shadow.normalBias = 0.02;
-        light.shadow.radius = 4;
-        light.shadow.camera.near = 0.2;
-        light.shadow.camera.far = 12;
-      }
-      level.add(light, light.target);
-      spots.push({ light, intensity: light.intensity });
-    });
-
-    // One weak omni light per room, just under the ceiling, so the upper walls
-    // and the ceiling aren't pitch black (real rooms have light bouncing around).
-    const fill = new THREE.PointLight(room.mood.color, 2.2 * room.mood.intensity, 14, 1.5);
-    fill.position.set((room.minX + room.maxX) / 2, WALL_HEIGHT - 0.7, (room.minZ + room.maxZ) / 2);
-    level.add(fill);
-    const fillIntensity = fill.intensity;
+    // The room's lamp, under the ceiling in the middle of the room. Its reach
+    // is limited to roughly the room, so neighbouring rooms stay separate.
+    const w = room.maxX - room.minX, d = room.maxZ - room.minZ;
+    const reach = Math.hypot(w, d) * 0.62 + 1.5;
+    const lamp = new THREE.PointLight(room.mood.color, 12 * room.mood.intensity, reach, 1.1);
+    lamp.position.set((room.minX + room.maxX) / 2, WALL_HEIGHT - 1.0, (room.minZ + room.maxZ) / 2);
+    level.add(lamp);
+    const lampIntensity = lamp.intensity;
 
     control[room.id] = {
       dark: false,
@@ -216,10 +205,9 @@ function buildLights(level) {
       setDark(dark) {
         if (this.dark === dark) return;
         this.dark = dark;
-        // Lights don't vanish (that would force shaders to recompile): they dim to zero.
-        for (const s of spots) s.light.intensity = dark ? 0 : s.intensity;
-        fill.intensity = dark ? fillIntensity * 0.12 : fillIntensity;
-        fill.color.setHex(dark ? 0x4060a0 : room.mood.color); // faint blue "night" glow
+        // Lights don't vanish (that would force shaders to recompile): they dim.
+        lamp.intensity = dark ? lampIntensity * 0.06 : lampIntensity;
+        lamp.color.setHex(dark ? 0x4060a0 : room.mood.color); // faint blue "night" glow
         panelMaterial.emissiveIntensity = dark ? 0 : 3;
         this.switchProp?.userData.setOn(!dark);
       },
@@ -285,7 +273,7 @@ function placeOnPlan(object, x, y, z, face) {
   object.rotation.y = FACE_ROTATION[face] ?? 0;
 }
 
-function buildObstacles(level, cameraBlockers) {
+function buildObstacles(level, cameraBlockers, moving) {
   const byId = {};
   OBSTACLES.forEach((o, index) => {
     // Map sizes are in world axes. If the object is turned sideways (faces
@@ -294,7 +282,8 @@ function buildObstacles(level, cameraBlockers) {
     const params = { w: sideways ? o.d : o.w, d: sideways ? o.w : o.d, h: o.h, seed: index + 1, style: o.style };
     const prop = buildProp(o.type, params);
     placeOnPlan(prop, o.x, 0, o.z, o.face);
-    level.add(prop);
+    // Animated furniture (safes, vault) must stay separate; the rest gets merged.
+    (prop.userData.setState ? moving : level).add(prop);
     if (o.id) byId[o.id] = prop;
 
     cameraBlockers.push(new THREE.Box3(

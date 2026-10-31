@@ -10,6 +10,7 @@
 
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { getMaterial } from './materials.js';
 
 /**
@@ -77,4 +78,56 @@ export function boxMesh(w, h, d, material, position, parent) {
 /** Shortcut: a cylinder standing upright. Position is the cylinder CENTRE. */
 export function cylinderMesh(radiusTop, radiusBottom, height, material, position, parent, segments = 24) {
   return mesh(new THREE.CylinderGeometry(radiusTop, radiusBottom, height, segments), material, position, parent);
+}
+
+/**
+ * PERFORMANCE: fuse all still meshes of a group into one mesh per material.
+ * The graphics card pays a fixed cost for every separate object it draws
+ * ("draw call"); one big mesh instead of 300 small ones is much faster.
+ *
+ * Meshes that can't be merged this way (instanced meshes, meshes with several
+ * materials) and non-mesh objects (lights) are kept as they are.
+ * @param {THREE.Group} group - its contents are consumed
+ * @returns {THREE.Group} a new group holding the merged result
+ */
+export function mergeStaticMeshes(group) {
+  group.updateMatrixWorld(true);
+  const buckets = new Map(); // material -> list of geometries (in world space)
+  const keep = [];
+  group.traverse((object) => {
+    if (object === group) return;
+    if (object.isMesh && !object.isInstancedMesh && !Array.isArray(object.material)) {
+      // Copy the geometry, move it to where the mesh really is, keep only the
+      // attributes every geometry has (position, normal, uv).
+      let geo = object.geometry.index ? object.geometry.toNonIndexed() : object.geometry.clone();
+      geo.applyMatrix4(object.matrixWorld);
+      for (const name of Object.keys(geo.attributes)) {
+        if (!['position', 'normal', 'uv'].includes(name)) geo.deleteAttribute(name);
+      }
+      if (!geo.attributes.uv) {
+        geo.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(geo.attributes.position.count * 2), 2));
+      }
+      geo.morphAttributes = {};
+      if (!buckets.has(object.material)) buckets.set(object.material, []);
+      buckets.get(object.material).push(geo);
+    } else if (object.isInstancedMesh || object.isMesh || object.isLight || object.isSprite) {
+      keep.push(object);
+    }
+  });
+
+  const result = new THREE.Group();
+  result.name = 'level-merged';
+  for (const [material, geos] of buckets) {
+    const merged = mergeGeometries(geos, false);
+    for (const g of geos) g.dispose();
+    if (!merged) continue;
+    const m = new THREE.Mesh(merged, material);
+    m.matrixAutoUpdate = false; // never moves
+    result.add(m);
+  }
+  // attach() moves an object to a new parent while keeping its world position.
+  for (const object of keep) {
+    if (object.parent && !keep.includes(object.parent)) result.attach(object);
+  }
+  return result;
 }

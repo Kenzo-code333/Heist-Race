@@ -19,7 +19,13 @@ remembered / live) and noise ripples, chat wheel (hold Q) with speech bubbles + 
 server-side fog of war (rival thieves and guards are only sent when in line of sight),
 a second guard, 4 s spawn immunity.
 
-Next steps: playtesting feedback, balance tuning (constants.js), performance tuning.
+**Performance + cartoon art pass (after M7):** fast rendering by default (no shadow maps,
+no post-processing, one PointLight per room, pixel ratio ≤ 1.25, static level merged into
+one mesh per material: ~2,780 → ~125 draw calls per frame), toon materials everywhere,
+Kenney cartoon character (MIT, `client/src/assets/kenney/`) with idle/walk animations,
+blob shadows. `?quality=low` / `?quality=high` switch presets.
+
+Next steps: playtesting feedback, balance tuning (constants.js), furniture models.
 
 | # | Milestone | Status |
 |---|-----------|--------|
@@ -53,7 +59,8 @@ npm run dev        # server on :3000 + Vite client on :5173 → open http://loca
   `client/src/net/LocalSocket.js` stands in for Socket.io. Artifact: https://claude.ai/artifact/8H8ZtixCxuyqtZLMUwsVgm
 - Online hosting: `render.yaml` (Render Blueprint, free plan, health check `/health`). Socket.io
   `pingTimeout` is 60 s to survive slow level builds and network hiccups.
-- Graphics switches via URL: `?quality=low`, or individually `?ao=0`, `?bloom=0`, `?shadows=0`.
+- Graphics presets via URL: `?quality=low` (lower resolution) / default (fast) / `?quality=high`
+  (ambient occlusion + bloom); individual `?ao=1`, `?bloom=1`.
 - Server health check: http://localhost:3000/health
 - In dev, the browser console exposes `window.heist` (renderer, network, input, session).
 - **Two players on one computer:** open http://localhost:5173 in two tabs/windows; create a
@@ -90,14 +97,15 @@ client/
   src/main.js           entry point: app states (menu → lobby → match), render loop, idle menu camera
   src/style.css
   src/game/
-    Renderer.js         WebGLRenderer, scene, camera, env reflections, GTAO + bloom post-processing, GRAPHICS flags
+    Renderer.js         WebGLRenderer, scene, camera, hemisphere fill, optional GTAO + bloom, GRAPHICS presets
     LevelBuilder.js     map data → floors, ceilings, walls (per-room finish), trim, door frames, lights,
                         props; returns handles: cameraBlockers, props (by id), doors, lights (per room)
     props.js            furniture/decor builders (PROP_BUILDERS registry), local space: front = +z
-    materials.js        cached PBR material catalogue (getMaterial(name))
+    materials.js        cached material catalogue (getMaterial(name)), converted to toon shading (toonify)
     textures.js         procedural, tileable canvas textures (value noise) + painting generator
-    geometry.js         helpers: boxGeo (UVs in metres), roundedBoxGeo, floorPlane, mesh()
-    CharacterModel.js   jointed character (outfit 'thief' | 'guard') + walk/run/crouch/knockout animation
+    geometry.js         helpers: boxGeo (UVs in metres), roundedBoxGeo, floorPlane, mesh(), mergeStaticMeshes()
+    CharacterModel.js   Kenney glTF character (loadCharacterAssets() once), outfits 'thief' | 'guard',
+                        idle/walk blend, crouch squash, knockout, blob shadow, carried loot
     GuardView.js        guard model + flashlight SpotLight + VisionCone + ?/! icon
     VisionCone.js       fan of rays → translucent floor shape
     CameraView.js       security camera model + red cone
@@ -140,7 +148,8 @@ client/
 - Yaw 0 = looking towards **-z** ("north"). Forward = (-sin yaw, -cos yaw); right = (cos yaw, -sin yaw).
 - Obstacles are axis-aligned rectangles only (`face` ∈ n/s/e/w); props are built facing +z and rotated.
 - All geometry UVs are in metres; each material's texture `repeat` = 1 / tile size in metres.
-- Only the first ceiling light per room casts shadows (performance).
+- No shadow maps: one PointLight per room (dims when the lights are cut) + hemisphere fill;
+  characters use blob shadows. Static level meshes are merged; moving parts stay separate.
 - Controls: WASD move, Shift run, C toggle crouch-sneak, E interact (tap / hold), 1/2 gadgets,
   Tab tablet, Q chat wheel. Keys use `event.code` (physical position → AZERTY works).
 - Gameplay numbers (speeds, noise radii, alarm amounts, timers, gadget stats) live in

@@ -11,7 +11,6 @@ import { CharacterModel } from './CharacterModel.js';
 import { VisionCone } from './VisionCone.js';
 import { GUARD } from '../../../shared/constants.js';
 import { VISION_BLOCKERS_STANDING } from '../../../shared/map.js';
-import { GRAPHICS } from './Renderer.js';
 
 // Cone colour per guard state.
 const STATE_COLORS = {
@@ -45,12 +44,8 @@ export class GuardView {
     this.model = new CharacterModel({ outfit: 'guard' });
     scene.add(this.model.root);
 
-    // Real flashlight: a narrow spotlight from the torch, casting shadows.
+    // Real flashlight: a narrow spotlight from the torch (no shadow map: too slow).
     this.light = new THREE.SpotLight(0xfff2d6, 30, GUARD.visionRange + 2, GUARD.visionHalfAngle, 0.45, 1.6);
-    this.light.castShadow = GRAPHICS.shadows;
-    this.light.shadow.mapSize.set(512, 512);
-    this.light.shadow.bias = -0.0005;
-    this.light.shadow.normalBias = 0.03;
     this.model.flashlightTip.add(this.light);
     this.light.position.set(0, 0, 0);
     this.light.target.position.set(0, -0.6, -5);

@@ -41,6 +41,8 @@ To try multiplayer alone, open the link in a second browser tab or window.
 
 If it runs slowly: http://localhost:5173/?quality=low
 
+Character model by Kenney (MIT license), see `client/src/assets/kenney/LICENSE.md`.
+
 ## Single-player preview file
 
 `npm run build:preview` creates `dist-preview/heist-race.html`: one file with the whole game

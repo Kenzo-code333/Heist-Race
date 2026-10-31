@@ -621,10 +621,6 @@ function skylight() {
   const rope = new THREE.MeshStandardMaterial({ color: 0xc8b68a, roughness: 0.95 });
   cylinderMesh(0.018, 0.018, top - 0.25, rope, [0.25, (top + 0.25) / 2, 0.1], g, 8);
   mesh(new THREE.SphereGeometry(0.045, 10, 8), rope, [0.25, 0.28, 0.1], g); // knot
-  const moon = new THREE.SpotLight(0x8fa8ff, 6, 6, 0.5, 0.8, 1.5); // faint moonlight beam
-  moon.position.set(0, top, 0);
-  moon.target.position.set(0, 0, 0);
-  g.add(moon, moon.target);
   return g;
 }
 

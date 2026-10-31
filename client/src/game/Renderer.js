@@ -22,54 +22,64 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { setMaxAnisotropy } from './textures.js';
 
-// Quality switches. Set to false for a big speed-up on weak computers.
-// They can also be changed from the address bar without editing code, e.g.
-//   http://localhost:5173/?quality=low      (everything off, fastest)
-//   http://localhost:5173/?ao=0&bloom=0     (individual switches)
+// Quality switches. The default is FAST: no shadow maps, no post-processing.
+// From the address bar:
+//   ?quality=low    → also lowers the resolution (weak laptops, the Claude preview)
+//   ?quality=high   → adds ambient occlusion + glow (strong graphics cards)
+//   ?ao=1 / ?bloom=1 → individual switches
 const params = new URLSearchParams(window.location.search);
-const low = params.get('quality') === 'low';
+const quality = params.get('quality') ?? 'normal';
 const flag = (name, fallback) => (params.has(name) ? params.get(name) !== '0' : fallback);
 export const GRAPHICS = {
-  shadows: flag('shadows', !low),
-  ambientOcclusion: flag('ao', !low),
-  bloom: flag('bloom', !low),
-  maxPixelRatio: low ? 1 : 2, // 1 = faster, 2 = sharper on high-DPI ("Retina") screens
+  ambientOcclusion: flag('ao', quality === 'high'),
+  bloom: flag('bloom', quality === 'high'),
+  // How many screen pixels per CSS pixel. High-DPI screens would otherwise make
+  // the GPU draw up to 4x more pixels — the most common cause of low frame rates.
+  maxPixelRatio: quality === 'low' ? 0.75 : quality === 'high' ? 2 : 1.25,
+  antialias: quality !== 'low',
 };
 
 export class Renderer {
   /** @param {HTMLElement} container - the element the canvas goes into */
   constructor(container) {
     // --- The WebGL renderer ---
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    this.renderer = new THREE.WebGLRenderer({ antialias: GRAPHICS.antialias, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, GRAPHICS.maxPixelRatio));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    // Tone mapping squeezes very bright and very dark values into what a screen
-    // can show, like a film camera. AgX gives natural, filmic colours.
-    this.renderer.toneMapping = THREE.AgXToneMapping;
-    this.renderer.toneMappingExposure = 1.15;
-    this.renderer.shadowMap.enabled = GRAPHICS.shadows;
-    this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    // Tone mapping squeezes bright and dark values into what a screen can show.
+    // "Neutral" keeps the cartoon colours bright and saturated.
+    this.renderer.toneMapping = THREE.NeutralToneMapping;
+    this.renderer.toneMappingExposure = 1.0;
+    // No real-time shadow maps (they are expensive); characters get a cheap
+    // "blob" shadow under their feet instead (see CharacterModel.js).
+    this.renderer.shadowMap.enabled = false;
     container.appendChild(this.renderer.domElement);
     setMaxAnisotropy(this.renderer.capabilities.getMaxAnisotropy());
 
     // --- Scene and camera ---
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x050506);
+    this.scene.background = new THREE.Color(0x14121c);
     // field of view 65°, aspect ratio, near & far clipping distances (metres)
     this.camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.05, 120);
 
-    // --- Reflections: a soft generic "room" environment map ---
-    // Shiny surfaces (marble, chrome, glass) reflect this, which is what makes
-    // them read as polished. Kept dim because the heist happens at night.
+    // --- Soft reflections for the few shiny materials (glass, gold) ---
     const pmrem = new THREE.PMREMGenerator(this.renderer);
     this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    this.scene.environmentIntensity = 0.12;
+    this.scene.environmentIntensity = 0.35;
 
-    // --- A faint blue-ish ambient fill (moonlight leaking in at night) ---
-    this.scene.add(new THREE.HemisphereLight(0x8090b0, 0x201a14, 0.12));
+    // --- General soft light: blue-ish from above (night), warm from below ---
+    // Each room adds its own lamp (LevelBuilder.js); cutting a room's lights
+    // leaves only this dim fill there.
+    this.ambient = new THREE.HemisphereLight(0x9aa8d8, 0x3a2e28, 0.55);
+    this.scene.add(this.ambient);
 
-    // --- Post-processing chain ---
+    // --- Optional post-processing (only with ?quality=high) ---
+    this.composer = null;
+    if (!GRAPHICS.ambientOcclusion && !GRAPHICS.bloom) {
+      window.addEventListener('resize', () => this.onResize());
+      return;
+    }
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     if (GRAPHICS.ambientOcclusion) {
@@ -109,10 +119,11 @@ export class Renderer {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
-    this.composer.setSize(w, h);
+    this.composer?.setSize(w, h);
   }
 
   render() {
-    this.composer.render();
+    if (this.composer) this.composer.render();
+    else this.renderer.render(this.scene, this.camera);
   }
 }
